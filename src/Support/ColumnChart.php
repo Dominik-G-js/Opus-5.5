@@ -140,7 +140,7 @@ final class ColumnChart
         if ($value >= 1_000_000) {
             return rtrim(rtrim(number_format($value / 1_000_000, 1, ',', ''), '0'), ',') . ' mil.';
         }
-        if ($value >= 10_000) {
+        if ($value >= 100_000) {
             return rtrim(rtrim(number_format($value / 1000, 1, ',', ''), '0'), ',') . ' tis.';
         }
 
