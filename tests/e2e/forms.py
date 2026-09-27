@@ -43,6 +43,7 @@ def main():
         # ---------------------------------------------------------------- 0) prázdná instalace
         dash = get("").text
         check("Začni první AI modelkou" in dash and dash.count("+ Přidat AI modelku") >= 3, "prázdný přehled: výzva a tlačítka Přidat AI modelku")
+        check('popovertarget="nav-drawer"' in dash and 'id="nav-drawer" popover' in dash, "mobilní menu jako nativní popover")
         for path in ["/earnings/new", "/links/new", "/earnings/import", "/models"]:
             check("+ Přidat AI modelku" in get(path).text, f"{path}: tlačítko Přidat AI modelku")
         check(app.db("SELECT COUNT(*) FROM models")[0][0] == 0 and app.db("SELECT COUNT(*) FROM transactions")[0][0] == 0, "žádná demo data v čisté instalaci")

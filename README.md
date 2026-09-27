@@ -50,7 +50,7 @@ Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 - **Ostatní** (Fansly, Patreon…) — ruční zadání nebo CSV import.
 
 ### Vzhled
-Administrace má tmavý „Dark Luxury“ vzhled, pokud má systém tmavý režim, jinak jeho světlou variantu. Grafy se vykreslují na serveru jako SVG (bez knihoven a inline stylů kvůli CSP), písmo Plus Jakarta Sans je přibalené v `public/assets/fonts/` (licence SIL OFL, `OFL.txt`), ikony jsou z [Lucide](https://lucide.dev) (ISC). Předloha je React prototyp v `design/admin-redesign/`.
+Administrace má tmavý „Dark Luxury“ vzhled, pokud má systém tmavý režim, jinak jeho světlou variantu. Plynulé přechody mezi stránkami (View Transitions), mobilní menu jako nativní popover, potvrzení mazání v nativním dialogu, chyby formulářů až po vyplnění (`:user-invalid`, s `aria-invalid`), vše jako progresivní vylepšení bez závislostí. Grafy se vykreslují na serveru jako SVG (bez knihoven a inline stylů kvůli CSP), písmo Plus Jakarta Sans je přibalené v `public/assets/fonts/` (licence SIL OFL, `OFL.txt`), ikony jsou z [Lucide](https://lucide.dev) (ISC). Předloha je React prototyp v `design/admin-redesign/`.
 
 ## Požadavky
 - PHP **8.2+** s rozšířeními `pdo_sqlite`, `sodium`, `curl`, `mbstring`, `gd`, `fileinfo` (volitelně `intl` pro hezčí slugy)

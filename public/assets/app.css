@@ -19,7 +19,7 @@
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --page: #f6f4fb;
   --page-2: #eee8f8;
   --glow-1: rgba(236, 72, 153, 0.12);
@@ -68,6 +68,10 @@
   --k-fees: #7c3aed;
   --k-costs: #64748b;
   --k-profit: #059669;
+  --scroll-thumb: rgba(91, 33, 182, 0.28);
+  --scroll-track: transparent;
+  --selection: rgba(219, 39, 119, 0.2);
+  --backdrop: rgba(27, 21, 48, 0.4);
   --radius: 18px;
   --radius-sm: 11px;
   --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -75,7 +79,6 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: dark;
     --page: #07060d;
     --page-2: #140b22;
     --glow-1: rgba(236, 72, 153, 0.13);
@@ -109,16 +112,26 @@
     --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 24px 48px -20px rgba(0, 0, 0, 0.75);
     --hero-ink: linear-gradient(90deg, #ffffff, #e2e8f0 55%, #94a3b8);
     --k-profit: #10b981;
+    --scroll-thumb: rgba(196, 181, 253, 0.26);
+    --selection: rgba(236, 72, 153, 0.32);
+    --backdrop: rgba(4, 3, 10, 0.62);
   }
 }
 
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+:where(*, ::before, ::after) { box-sizing: border-box; }
+html {
+  -webkit-text-size-adjust: 100%;
+  accent-color: var(--accent);
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  scrollbar-width: thin;
+}
 body {
   margin: 0;
   min-height: 100vh;
   color: var(--ink);
-  font: 15px/1.55 var(--font);
+  font: .9375rem/1.55 var(--font);
+  /* Náhradní systémové písmo se před načtením Plus Jakarta Sans srovná na stejnou výšku malých písmen. */
+  font-size-adjust: from-font;
   word-spacing: .06em;
   background-color: var(--page);
   background-image:
@@ -135,6 +148,9 @@ h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; }
 h2 { font-size: 1.08rem; font-weight: 700; }
 h3 { font-size: 1rem; font-weight: 700; }
 p { margin: 0 0 .8em; }
+p, li, dd { text-wrap: pretty; }
+::selection { background: var(--selection); }
+::placeholder { color: var(--muted); opacity: .75; }
 strong { font-weight: 700; }
 code, pre, .mono { font-family: var(--mono); font-size: .86em; }
 pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border); padding: .75rem .9rem; border-radius: var(--radius-sm); margin: 0 0 .8em; }
@@ -157,6 +173,9 @@ img { max-width: 100%; height: auto; }
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   backdrop-filter: blur(20px) saturate(140%);
 }
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.sidebar .menu-button { display: none; }
+.sidebar-nav { display: flex; flex-direction: column; flex: 1; }
 .brand { display: flex; align-items: center; gap: .7rem; padding: .25rem .5rem 1.25rem; color: var(--ink); }
 .brand:hover { text-decoration: none; }
 .brand-mark {
@@ -191,12 +210,20 @@ code { overflow-wrap: anywhere; word-break: break-word; }
 
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; padding: .75rem 16px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .brand { padding: .25rem 0 .75rem; }
-  .btn-add { margin: 0 0 .6rem; }
-  .nav { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; padding-bottom: .25rem; }
-  .nav a { white-space: nowrap; padding: .45rem .7rem; }
-  .nav-footer { margin-top: .5rem; padding: .5rem 0 0; }
+  .sidebar {
+    position: sticky; top: 0; z-index: 40; height: auto; overflow: visible;
+    padding: .6rem 16px; border-right: 0; border-bottom: 1px solid var(--border);
+  }
+  .brand { padding: .15rem 0; }
+  .sidebar-nav .btn-add { margin: .6rem 0 .5rem; }
+  .sidebar-nav .nav { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; padding-bottom: .25rem; }
+  .sidebar-nav .nav a { white-space: nowrap; padding: .45rem .7rem; }
+  .sidebar-nav .nav-footer { margin-top: .5rem; padding: .5rem 0 0; }
+  /* S podporou popoveru je menu vysouvací panel a horní lišta ukazuje jen značku a tlačítko. */
+  @supports selector(:popover-open) {
+    .sidebar-nav { display: none; }
+    .sidebar .menu-button { display: inline-flex; }
+  }
   .main { padding: 1.25rem 16px 2rem; }
 }
 
@@ -244,7 +271,7 @@ code { overflow-wrap: anywhere; word-break: break-word; }
 .stat-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin-top: .2rem; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
 .stat-note { color: var(--muted); font-size: .8rem; }
 .hero-value {
-  margin: .1rem 0 .5rem; font-size: clamp(2.3rem, 7vw, 3.4rem); font-weight: 800; line-height: 1.05; letter-spacing: -.035em;
+  margin: .1rem 0 .5rem; font-size: clamp(2.3rem, 1.6rem + 2.6vw, 3.4rem); font-weight: 800; line-height: 1.05; letter-spacing: -.035em;
   font-variant-numeric: tabular-nums; overflow-wrap: normal; color: var(--ink);
 }
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
@@ -266,7 +293,9 @@ td.num, th.num, .num { text-align: right; font-variant-numeric: tabular-nums; wh
 tbody tr:hover { background: var(--surface-2); }
 tbody tr:last-child td { border-bottom: 0; }
 .table-lux thead tr { background: var(--surface-2); }
-.table-lux td { white-space: nowrap; }
+/* Tabulky v kartách: v úzké kartě se neláme (posouvá se do strany), v širší se text zalomí. */
+.card-flush { container-type: inline-size; }
+@container (max-width: 34rem) { .table-lux td { white-space: nowrap; } }
 .table-lux th:first-child, .table-lux td:first-child { padding-left: 1.25rem; }
 .table-lux th:last-child, .table-lux td:last-child { padding-right: 1.25rem; }
 .card-flush .table-wrap { border-top: 1px solid var(--grid); }
@@ -286,8 +315,23 @@ input[type=text], input[type=password], input[type=number], input[type=date], in
   transition: border-color .15s, box-shadow .15s;
 }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-textarea { min-height: 6rem; resize: vertical; }
-textarea.prompt { font-family: var(--mono); font-size: .86rem; min-height: 10rem; }
+textarea { field-sizing: content; min-block-size: 4lh; max-block-size: 22lh; resize: vertical; }
+textarea.prompt { font-family: var(--mono); font-size: .86rem; min-block-size: 8lh; max-block-size: 32lh; }
+/* Chyba se ukáže až po vyplnění / odeslání (:user-invalid), ne hned při načtení. */
+:is(input, select, textarea):user-invalid,
+.field:has(> .field-error) :is(input, select, textarea) {
+  border-color: var(--bad);
+  background-color: color-mix(in srgb, var(--bad) 6%, var(--surface-solid));
+}
+.field:has(:user-invalid) > label, .field:has(> .field-error) > label { color: var(--bad); }
+input[type=file] { max-width: 100%; color: var(--muted); font: inherit; font-size: .86rem; }
+::file-selector-button {
+  margin-right: .75rem; padding: .45rem .9rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+::file-selector-button:hover { background: var(--surface-3); border-color: var(--accent-2); }
+.form-grid + p, .form-grid + .actions { margin-top: 1.1rem; }
 .check { display: flex; gap: .5rem; align-items: flex-start; }
 .check input { margin-top: .3rem; accent-color: var(--accent); }
 input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
@@ -339,6 +383,7 @@ legend { font-weight: 700; padding: 0 .4rem; }
 .chip { display: inline-flex; align-items: center; padding: .08rem .55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); font-size: .78rem; font-weight: 600; white-space: nowrap; }
 .dot { display: inline-block; flex: none; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .4rem; vertical-align: .05em; }
 .muted { color: var(--muted); }
+.nowrap { white-space: nowrap; }
 .small { font-size: .85rem; }
 .pos { color: var(--good); }
 .neg { color: var(--bad); }
@@ -366,6 +411,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .purpose-edit { display: flex; gap: .4rem; align-items: center; margin-top: .25rem; }
 .purpose-edit input[type=text] { padding: .25rem .45rem; font-size: .85rem; }
 .purpose-edit .link-btn { flex: none; white-space: nowrap; }
+.avatar-initials { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; background: linear-gradient(135deg, #f43f5e, #a855f7); border: 0; }
 .avatar { width: 44px; height: 44px; border-radius: 14px; object-fit: cover; background: var(--surface-2); vertical-align: middle; border: 1px solid var(--border); }
 
 /* Prompt */
@@ -458,15 +504,6 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
 .stop-ring-b { stop-color: var(--accent-2); }
 
 /* Přehled */
-.dashboard > * { animation: rise .45s ease-out both; }
-.dashboard > :nth-child(2) { animation-delay: .04s; }
-.dashboard > :nth-child(3) { animation-delay: .08s; }
-.dashboard > :nth-child(4) { animation-delay: .12s; }
-.dashboard > :nth-child(5) { animation-delay: .16s; }
-.dashboard > :nth-child(6) { animation-delay: .2s; }
-.dashboard > :nth-child(7) { animation-delay: .24s; }
-.dashboard > :nth-child(n + 8) { animation-delay: .28s; }
-@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
 .period-bar { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
 .segmented { display: inline-flex; flex-wrap: wrap; gap: .2rem; padding: .25rem; border-radius: 13px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
@@ -601,7 +638,109 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
 .mt-2 { margin-top: 2rem; }
 .mt-1 { margin-top: 1rem; }
 
+/* Mobilní menu: nativní popover (Esc a klik mimo zavírají, fokus řeší prohlížeč), vysouvá se zleva. */
+.drawer {
+  position: fixed; inset: 0 auto 0 0; margin: 0;
+  width: min(20rem, 86vw); height: 100dvh; max-height: none;
+  padding: .9rem .9rem 1.25rem;
+  border: 0; border-right: 1px solid var(--border);
+  background: var(--surface-solid); color: var(--ink);
+  overflow-y: auto; overscroll-behavior: contain;
+  translate: -100% 0;
+  transition: translate .3s cubic-bezier(.2, .8, .2, 1), display .3s allow-discrete, overlay .3s allow-discrete;
+}
+.drawer:popover-open { display: flex; flex-direction: column; translate: 0 0; }
+@starting-style { .drawer:popover-open { translate: -100% 0; } }
+.drawer::backdrop { background-color: transparent; transition: background-color .3s, display .3s allow-discrete, overlay .3s allow-discrete; }
+.drawer:popover-open::backdrop { background-color: var(--backdrop); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+@starting-style { .drawer:popover-open::backdrop { background-color: transparent; } }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: 0 .25rem .9rem; }
+.drawer .btn-add { margin: 0 0 1rem; }
+.drawer .nav-footer { margin-top: auto; }
+
+/* Potvrzení nevratných akcí (app.js): nativní modální <dialog>. */
+.confirm-dialog {
+  width: min(26rem, calc(100vw - 32px)); padding: 1.3rem 1.4rem 1.2rem;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-solid); color: var(--ink);
+  box-shadow: 0 32px 64px -24px rgba(0, 0, 0, .65);
+  opacity: 0; scale: .96;
+  transition: opacity .2s ease-out, scale .2s ease-out, display .2s allow-discrete, overlay .2s allow-discrete;
+}
+.confirm-dialog[open] { opacity: 1; scale: 1; }
+@starting-style { .confirm-dialog[open] { opacity: 0; scale: .96; } }
+.confirm-dialog::backdrop { background-color: transparent; transition: background-color .2s, display .2s allow-discrete, overlay .2s allow-discrete; }
+.confirm-dialog[open]::backdrop { background-color: var(--backdrop); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+@starting-style { .confirm-dialog[open]::backdrop { background-color: transparent; } }
+.confirm-dialog h2 { display: flex; gap: .6rem; align-items: flex-start; margin: 0 0 1.1rem; font-size: 1.05rem; }
+.confirm-dialog h2 .icon { color: var(--bad); flex: none; margin-top: .1rem; }
+.confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
+.btn-danger-solid { background: #e11d48; border-color: #e11d48; color: #fff; }
+.btn-danger-solid:hover { background: #e11d48; border-color: #e11d48; filter: brightness(1.08); }
+
+/* Výběrová pole v barvách administrace (Chrome/Edge; jinde nativní). Jen pro myš — na dotyku zůstane nativní výběr. */
+@media (pointer: fine) {
+  @supports (appearance: base-select) {
+    select, ::picker(select) { appearance: base-select; }
+    select { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
+    select::picker-icon { color: var(--muted); transition: rotate .2s; }
+    select:open::picker-icon { rotate: 180deg; }
+    ::picker(select) {
+      margin-block: .3rem; padding: .3rem; max-block-size: 22rem;
+      border: 1px solid var(--border); border-radius: 13px;
+      background: var(--surface-solid); color: var(--ink);
+      box-shadow: 0 24px 48px -18px rgba(0, 0, 0, .5);
+    }
+    option { padding: .45rem .65rem; border-radius: 9px; }
+    option:hover, option:focus-visible { background: var(--surface-3); outline: none; }
+    option:checked { font-weight: 600; }
+    option::checkmark { color: var(--accent); }
+  }
+}
+
+/* Plynulé přechody mezi stránkami (Chrome, Edge, Safari 18.2+); postranní panel zůstává, obsah se prolne. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .sidebar { view-transition-name: sidebar; }
+  .main { view-transition-name: main; }
+  .sidebar-nav .nav a[aria-current="page"] { view-transition-name: nav-current; }
+  .segmented a[aria-current="page"] { view-transition-name: period-current; }
+  ::view-transition-old(main) { animation: vt-out .16s ease-in both; }
+  ::view-transition-new(main) { animation: vt-in .34s cubic-bezier(.2, .8, .2, 1) both; }
+  ::view-transition-group(nav-current), ::view-transition-group(period-current) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+}
+@keyframes vt-out { to { opacity: 0; translate: 0 -6px; } }
+@keyframes vt-in { from { opacity: 0; translate: 0 12px; } }
+
+/* Karty se při scrollu jemně vynoří (jen s podporou scroll-driven animací, jinak jsou rovnou vidět). */
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    .main :is(.card, .stat, .tile) {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}
+@keyframes reveal { from { opacity: .35; translate: 0 1rem; } }
+
+/* Dotykové ovládání: dost velké cíle pro prst (WCAG 2.5.8). */
+@media (pointer: coarse) {
+  .btn-sm { min-block-size: 2.25rem; }
+  .link-btn, .row-actions a, td > a.small { display: inline-flex; align-items: center; min-block-size: 1.75rem; }
+}
+
+/* Režim vysokého kontrastu (Windows): stavy nesmí stát jen na pozadí a stínu. */
+@media (forced-colors: active) {
+  .btn-primary, .btn-danger-solid, .segmented a[aria-current="page"], .nav a[aria-current="page"] { border: 1px solid CanvasText; }
+  .card, .stat, .drawer, .confirm-dialog, .viz-tip, .delta, .badge, .chip { border-color: CanvasText; }
+  .hero-value { background: none; color: CanvasText; }
+  .area-col:focus-visible .area-guide { stroke: Highlight; }
+}
+
+/* Omezený pohyb: bez posunů a zvětšení, zůstanou jen okamžité změny. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .model-card:hover { transform: none; }
+  .model-card, .model-card:hover { transform: none; transition: none; }
+  .drawer, .drawer::backdrop, .confirm-dialog, .confirm-dialog::backdrop, .donut-seg, select::picker-icon { transition: none; }
+  .confirm-dialog { scale: none; }
 }

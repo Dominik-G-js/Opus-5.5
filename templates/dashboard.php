@@ -320,10 +320,10 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
                   <span class="muted">—</span>
                 <?php endif; ?>
               </td>
-              <td><?= $v->e($payment['model']) ?></td>
+              <td class="nowrap"><?= $v->e($payment['model']) ?></td>
               <td><span class="chip"><span class="dot fill-bg-<?= $v->e($payment['key']) ?>"></span><?= $v->e($payment['platform']) ?></span></td>
               <td><?= $v->label('tx_type', $payment['type']) ?></td>
-              <td><?= $v->date($payment['occurred_on']) ?></td>
+              <td class="nowrap"><?= $v->date($payment['occurred_on']) ?></td>
               <td class="num"><strong class="pos"><?= $v->money((int) $payment['gross']) ?></strong></td>
             </tr>
           <?php endforeach; ?>

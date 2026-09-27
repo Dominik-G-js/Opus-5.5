@@ -16,7 +16,7 @@
     <tbody>
     <?php foreach ($models as $model): ?>
       <tr>
-        <td><?php if ($model['avatar_image_id'] !== null): ?><img class="avatar" src="<?= $v->url('/images/' . $model['avatar_image_id']) ?>" alt="" loading="lazy"><?php endif; ?></td>
+        <td><?php if ($model['avatar_image_id'] !== null): ?><img class="avatar" src="<?= $v->url('/images/' . $model['avatar_image_id']) ?>" alt="" loading="lazy" width="44" height="44"><?php else: ?><span class="avatar avatar-initials" aria-hidden="true"><?= $v->e(mb_strtoupper(mb_substr((string) $model['name'], 0, 1))) ?></span><?php endif; ?></td>
         <td><a href="<?= $v->url('/models/' . $model['id']) ?>"><strong><?= $v->e($model['name']) ?></strong></a><br><span class="muted small"><?= $v->e($model['tagline']) ?></span></td>
         <td><?= $v->e($model['niche']) ?></td>
         <td><span class="badge"><?= $v->label('model_status', $model['status']) ?></span></td>

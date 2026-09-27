@@ -2,14 +2,144 @@
 (function () {
   'use strict';
 
-  // Potvrzení nevratných akcí: <form data-confirm="Opravdu smazat?">
+  // Potvrzení nevratných akcí: <form data-confirm="Opravdu smazat?"> otevře modální <dialog>
+  // (Esc nebo klik mimo = zrušit). Bez podpory <dialog> zůstává window.confirm.
+  var confirmDialog = null;
+
+  function buildConfirmDialog() {
+    var dialog = document.createElement('dialog');
+    dialog.className = 'confirm-dialog';
+    dialog.setAttribute('closedby', 'any');
+    dialog.setAttribute('aria-labelledby', 'confirm-dialog-title');
+    dialog.innerHTML = '<h2 id="confirm-dialog-title"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+      + '<path d="M12 9v4"/><path d="M12 17h.01"/></svg><span></span></h2>'
+      + '<div class="confirm-actions"><button type="button" class="btn" value="cancel" autofocus>Zrušit</button>'
+      + '<button type="button" class="btn btn-danger-solid" value="confirm"></button></div>';
+    dialog.addEventListener('click', function (event) {
+      var button = event.target.closest('button[value]');
+      if (button) {
+        dialog.close(button.value);
+        return;
+      }
+      // Klik na pozadí zavře dialog i v prohlížečích bez atributu closedby (Safari).
+      if (event.target === dialog && !('closedBy' in HTMLDialogElement.prototype)) {
+        var rect = dialog.getBoundingClientRect();
+        var inside = rect.top <= event.clientY && event.clientY <= rect.bottom && rect.left <= event.clientX && event.clientX <= rect.right;
+        if (!inside) {
+          dialog.close('cancel');
+        }
+      }
+    });
+    document.body.appendChild(dialog);
+
+    return dialog;
+  }
+
+  function submitConfirmed(form, submitter) {
+    form.dataset.confirmed = '1';
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+    } else {
+      form.submit();
+    }
+    delete form.dataset.confirmed;
+  }
+
+  function confirmLabel(submitter) {
+    var text = submitter ? submitter.textContent.trim() : '';
+    return text === '' ? 'Potvrdit' : text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
   document.addEventListener('submit', function (event) {
     var form = event.target;
     var message = form.getAttribute && form.getAttribute('data-confirm');
-    if (message && !window.confirm(message)) {
-      event.preventDefault();
+    if (!message || form.dataset.confirmed === '1') {
+      return;
+    }
+    event.preventDefault();
+    var submitter = event.submitter || null;
+    if (typeof HTMLDialogElement !== 'function' || typeof HTMLDialogElement.prototype.showModal !== 'function') {
+      if (window.confirm(message)) {
+        submitConfirmed(form, submitter);
+      }
+      return;
+    }
+    confirmDialog = confirmDialog || buildConfirmDialog();
+    confirmDialog.querySelector('h2 span').textContent = message;
+    confirmDialog.querySelector('button[value="confirm"]').textContent = confirmLabel(submitter);
+    confirmDialog.returnValue = '';
+    confirmDialog.addEventListener('close', function onClose() {
+      confirmDialog.removeEventListener('close', onClose);
+      if (confirmDialog.returnValue === 'confirm') {
+        submitConfirmed(form, submitter);
+      }
+    });
+    confirmDialog.showModal();
+  });
+
+  // Přístupnost chyb: aria-invalid odpovídá vizuálnímu :user-invalid (chyba až po interakci)
+  // a chybová hláška ze serveru se přiřadí ke svému poli (aria-describedby).
+  function syncInvalid(field) {
+    if (!field.matches || !field.matches('input, select, textarea')) {
+      return;
+    }
+    var invalid = false;
+    try {
+      invalid = field.matches(':user-invalid');
+    } catch (error) {
+      invalid = false; // prohlížeč bez :user-invalid — spoléhá na nativní hlášky
+    }
+    if (invalid) {
+      field.setAttribute('aria-invalid', 'true');
+    } else if (!field.hasAttribute('data-server-error')) {
+      field.removeAttribute('aria-invalid');
+    }
+  }
+  document.addEventListener('blur', function (event) { syncInvalid(event.target); }, true);
+  document.addEventListener('input', function (event) {
+    var field = event.target;
+    if (field.removeAttribute && field.hasAttribute('data-server-error')) {
+      field.removeAttribute('data-server-error'); // uživatel pole opravuje, serverová chyba už neplatí
+    }
+    if (field.getAttribute && field.getAttribute('aria-invalid') === 'true') {
+      syncInvalid(field);
     }
   });
+  document.addEventListener('submit', function (event) {
+    Array.prototype.forEach.call(event.target.elements || [], syncInvalid);
+  }, true);
+  Array.prototype.forEach.call(document.querySelectorAll('.field > .field-error'), function (error, index) {
+    var field = error.parentNode.querySelector('input, select, textarea');
+    if (!field) {
+      return;
+    }
+    error.id = error.id || 'field-error-' + index;
+    field.setAttribute('aria-invalid', 'true');
+    field.setAttribute('data-server-error', '');
+    var describedBy = field.getAttribute('aria-describedby');
+    field.setAttribute('aria-describedby', describedBy ? describedBy + ' ' + error.id : error.id);
+  });
+
+  // Mobilní menu: po návratu zpět (bfcache) ani po roztažení okna nezůstane otevřené.
+  var drawer = document.getElementById('nav-drawer');
+  if (drawer && typeof drawer.hidePopover === 'function') {
+    var closeDrawer = function () {
+      if (drawer.matches(':popover-open')) {
+        drawer.hidePopover();
+      }
+    };
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) {
+        closeDrawer();
+      }
+    });
+    window.matchMedia('(min-width: 861px)').addEventListener('change', function (event) {
+      if (event.matches) {
+        closeDrawer();
+      }
+    });
+  }
 
   // Kopírování promptu: <button data-copy="#id">
   document.addEventListener('click', function (event) {

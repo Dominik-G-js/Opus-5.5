@@ -3,17 +3,6 @@
 /** @var string $content */
 $title ??= $v->appName;
 $user = $v->user();
-$nav = [
-    '' => ['Přehled', 'layout-dashboard'],
-    '/models' => ['Modelky', 'sparkles'],
-    '/earnings' => ['Příjmy', 'wallet'],
-    '/fans' => ['Fanoušci', 'heart'],
-    '/costs' => ['Náklady', 'receipt'],
-    '/links' => ['Odkazy a prokliky', 'link-2'],
-    '/tools' => ['AI nástroje', 'wand-sparkles'],
-    '/platforms' => ['Platformy', 'layers'],
-    '/settings' => ['Nastavení', 'settings'],
-];
 ?><!doctype html>
 <html lang="cs">
 <head>
@@ -25,34 +14,36 @@ $nav = [
 <meta name="color-scheme" content="light dark">
 <title><?= $v->e($title) ?> · <?= $v->e($v->appName) ?></title>
 <link rel="stylesheet" href="<?= $v->asset('app.css') ?>">
+<?php /* Přechod mezi stránkami začne až po načtení obsahu (jinak by se prolínalo do prázdné stránky). */ ?>
+<link rel="expect" href="#main" blocking="render">
 <script src="<?= $v->asset('app.js') ?>" defer></script>
 </head>
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <a class="brand" href="<?= $v->url() ?>">
-      <span class="brand-mark"><?= $v->icon('gem') ?></span>
-      <span class="brand-text"><span class="brand-name"><?= $v->e($v->appName) ?></span><span class="brand-sub">administrace · 18+</span></span>
-    </a>
-    <?php if ($user !== null): ?>
-    <a class="btn btn-primary btn-add" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
-    <nav aria-label="Hlavní menu">
-      <ul class="nav">
-        <?php foreach ($nav as $path => [$label, $icon]): ?>
-          <li><a href="<?= $v->url($path) ?>"<?= $v->isActive($path) ? ' aria-current="page"' : '' ?>><?= $v->icon($icon) ?><span><?= $v->e($label) ?></span></a></li>
-        <?php endforeach; ?>
-      </ul>
-    </nav>
-    <div class="nav-footer small">
-      <span class="muted"><?= $v->e($user['username']) ?><?= (int) $user['totp_enabled'] === 1 ? '' : ' · <a href="' . $v->url('/settings') . '#twofactor">zapnout 2FA</a>' ?></span>
-      <form method="post" action="<?= $v->url('/logout') ?>" class="inline">
-        <?= $v->csrfField() ?>
-        <button type="submit" class="link-btn"><?= $v->icon('log-out', 'icon icon-xs') ?>Odhlásit</button>
-      </form>
+    <div class="sidebar-top">
+      <a class="brand" href="<?= $v->url() ?>">
+        <span class="brand-mark"><?= $v->icon('gem') ?></span>
+        <span class="brand-text"><span class="brand-name"><?= $v->e($v->appName) ?></span><span class="brand-sub">administrace · 18+</span></span>
+      </a>
+      <?php if ($user !== null): ?>
+        <button type="button" class="btn btn-icon menu-button" popovertarget="nav-drawer" aria-label="Otevřít menu"><?= $v->icon('menu') ?></button>
+      <?php endif; ?>
     </div>
+    <?php if ($user !== null): ?>
+      <div class="sidebar-nav"><?= $view->partial('partials/nav', ['user' => $user]) ?></div>
     <?php endif; ?>
   </aside>
-  <main class="main">
+  <?php if ($user !== null): ?>
+    <div class="drawer" id="nav-drawer" popover aria-label="Menu">
+      <div class="drawer-head">
+        <span class="brand-name"><?= $v->e($v->appName) ?></span>
+        <button type="button" class="btn btn-icon" popovertarget="nav-drawer" popovertargetaction="hide" aria-label="Zavřít menu"><?= $v->icon('x') ?></button>
+      </div>
+      <?= $view->partial('partials/nav', ['user' => $user]) ?>
+    </div>
+  <?php endif; ?>
+  <main class="main" id="main">
     <?= $view->partial('partials/flashes') ?>
     <?= $v->errorSummary() ?>
     <?= $content ?>
