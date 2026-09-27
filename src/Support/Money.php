@@ -89,6 +89,27 @@ final class Money
         return number_format($minor / 100, 2, ',', '');
     }
 
+    /**
+     * Doplní chybějící hrubou nebo čistou částku podle poplatku platformy (v %).
+     * Při poplatku 100 % nelze hrubou částku z čisté spočítat — pak se bere rovna čisté.
+     *
+     * @return array{0: int, 1: int} [hrubá, čistá]
+     */
+    public static function completeGrossNet(?int $gross, ?int $net, float $feePercent): array
+    {
+        if ($gross === null && $net === null) {
+            throw new InvalidArgumentException('Zadej hrubou nebo čistou částku.');
+        }
+        if ($feePercent < 0 || $feePercent > 100) {
+            throw new InvalidArgumentException('Poplatek musí být 0–100 %.');
+        }
+        $keep = 1 - $feePercent / 100;
+        $net ??= (int) round((int) $gross * $keep);
+        $gross ??= $keep > 0 ? (int) round($net / $keep) : $net;
+
+        return [$gross, $net];
+    }
+
     public static function convert(int $minor, float $rate): int
     {
         return (int) round($minor * $rate);

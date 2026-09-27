@@ -198,6 +198,17 @@ check("/m/nessa-wren" in r.text, "sitemap lists model")
 r = anon.get(A + f"/images/{image_id}", allow_redirects=False)
 check(r.status_code == 303, "private image requires login")
 
+# Změna hesla odhlásí ostatní zařízení, aktuální session zůstane
+other = requests.Session(); other.trust_env = False
+r = other.get(A + "/login")
+other.post(A + "/login", data={"_csrf": csrf(r.text), "username": USER, "password": PASSWORD}, allow_redirects=False)
+check(other.get(A, allow_redirects=False).status_code == 200, "druhé zařízení přihlášené")
+NEW_PASSWORD = PASSWORD + "-nove"
+post("/settings/password", {"current_password": PASSWORD, "password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD})
+check(other.get(A, allow_redirects=False).status_code == 303, "po změně hesla je druhé zařízení odhlášené")
+check(s.get(A, allow_redirects=False).status_code == 200, "aktuální session po změně hesla platí")
+post("/settings/password", {"current_password": NEW_PASSWORD, "password": PASSWORD, "password_confirm": PASSWORD})
+
 # 2FA
 post("/settings/2fa/start", {})
 r = get("/settings")

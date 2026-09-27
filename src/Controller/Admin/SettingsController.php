@@ -72,8 +72,9 @@ final class SettingsController extends Controller
         }
         $this->app->db->update('users', ['password_hash' => Passwords::hash($new)], ['id' => $user['id']]);
         $this->app->session->regenerate();
+        $this->app->auth->rememberPasswordFingerprint(); // ostatní přihlášená zařízení se tím odhlásí
         $this->app->logger->info('auth.password_changed', ['user' => $user['username']]);
-        $this->flash('success', 'Heslo změněno.');
+        $this->flash('success', 'Heslo změněno. Ostatní přihlášená zařízení byla odhlášena.');
 
         return $this->redirect('/settings');
     }

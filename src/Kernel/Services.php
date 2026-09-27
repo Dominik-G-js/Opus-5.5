@@ -18,7 +18,7 @@ final class Services
 {
     public static function exchangeRates(App $app): ExchangeRates
     {
-        return new ExchangeRates($app->db, new CurlHttpClient());
+        return new ExchangeRates($app->db, new CurlHttpClient(), $app->logger);
     }
 
     public static function ledger(App $app): Ledger

@@ -151,9 +151,7 @@ final class TransactionController extends Controller
             return $this->backWithErrors($request, $v, '/earnings/new');
         }
 
-        $fee = (float) $account['fee_percent'];
-        $net ??= (int) round((int) $gross * (1 - $fee / 100));
-        $gross ??= $fee < 100 ? (int) round($net / (1 - $fee / 100)) : $net;
+        [$gross, $net] = Money::completeGrossNet($gross, $net, (float) $account['fee_percent']);
         try {
             $row = $this->ledger()->prepareTransaction((int) $account['id'], [
                 'occurred_at' => new DateTimeImmutable($date . ' ' . $time . ':00', Clock::localZone()),

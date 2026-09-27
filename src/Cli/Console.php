@@ -6,13 +6,11 @@ namespace App\Cli;
 
 use App\Database\Database;
 use App\Database\Migrator;
-use App\Integration\Fanvue\FanvueException;
 use App\Kernel\App;
 use App\Kernel\Config;
 use App\Kernel\Services;
 use App\Security\Crypto;
 use App\Security\Passwords;
-use App\Service\ExchangeRateUnavailable;
 use App\Support\Clock;
 use RuntimeException;
 use Throwable;
@@ -194,7 +192,8 @@ final class Console
             try {
                 $result = $sync->sync((int) $account['id']);
                 $this->line("✔ @{$account['handle']}: {$result['imported']} plateb ({$result['days']} dní)");
-            } catch (FanvueException|ExchangeRateUnavailable $e) {
+            } catch (Throwable $e) {
+                // Chyba jednoho účtu (i nečekaná) nesmí zastavit synchronizaci ostatních; FanvueSync ji už zalogoval.
                 $failures++;
                 $this->line("✘ @{$account['handle']}: " . $e->getMessage());
             }

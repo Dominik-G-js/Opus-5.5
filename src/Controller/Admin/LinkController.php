@@ -21,7 +21,7 @@ final class LinkController extends Controller
     {
         $since = (new \DateTimeImmutable(Clock::todayLocal()))->modify('-29 days')->format('Y-m-d');
         $links = $this->app->db->all(
-            'SELECT l.*, m.name AS model_name, m.slug, m.page_domain,
+            'SELECT l.*, m.name AS model_name, m.slug, m.page_domain, m.page_published,
                 (SELECT COALESCE(SUM(clicks), 0) FROM link_clicks_daily c WHERE c.link_id = l.id) AS clicks_total,
                 (SELECT COALESCE(SUM(clicks), 0) FROM link_clicks_daily c WHERE c.link_id = l.id AND c.day >= :since) AS clicks_30
              FROM links l JOIN models m ON m.id = l.model_id
@@ -95,7 +95,8 @@ final class LinkController extends Controller
     /** @param array<string, mixed> $link */
     private function trackingUrl(array $link): string
     {
-        $domain = $link['page_domain'] ?? null;
+        // Vlastní doména obsluhuje jen zveřejněnou modelku; jinak by /go/ vracelo 404 → hlavní doména.
+        $domain = (int) ($link['page_published'] ?? 0) === 1 ? ($link['page_domain'] ?? null) : null;
 
         return is_string($domain) && $domain !== ''
             ? 'https://' . $domain . '/go/' . $link['code']

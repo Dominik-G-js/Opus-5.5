@@ -257,7 +257,9 @@ final class Stats
             ['m' => $modelId]
         );
         $costRows = $this->db->all(
-            'SELECT category, SUM(amount_czk_minor) AS total, SUM(quantity) AS quantity
+            'SELECT category, SUM(amount_czk_minor) AS total,
+                    SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END) AS quantity,
+                    SUM(CASE WHEN quantity > 0 THEN amount_czk_minor ELSE 0 END) AS total_with_quantity
              FROM costs WHERE model_id = :m GROUP BY category ORDER BY total DESC',
             ['m' => $modelId]
         );
@@ -271,7 +273,8 @@ final class Stats
                 $creation += (int) $row['total'];
             }
             if ($row['category'] === 'generation' && (int) $row['quantity'] > 0) {
-                $generationSpend += (int) $row['total'];
+                // Jen náklady se zadaným počtem kusů (dobití kreditů bez počtu by cenu za kus zkreslilo).
+                $generationSpend += (int) $row['total_with_quantity'];
                 $generationQuantity += (int) $row['quantity'];
             }
         }

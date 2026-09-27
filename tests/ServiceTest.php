@@ -142,3 +142,63 @@ test('Stats: měsíční souhrn, zisk a top fanoušci', function (): void {
     assertSame(12, count((new Stats($db))->monthlySeries(12)));
     assertTrue(Stats::isValidMonth('2025-04') && !Stats::isValidMonth('2025-13'));
 });
+
+test('ExchangeRates: měsíc stažený v průběhu se po jeho konci doplní', function (): void {
+    $db = testDatabase();
+    // Březen 2025 byl stažen 15. 3. (běžící měsíc) → obsahuje jen kurzy do 14. 3.
+    $db->insert('exchange_rates', ['currency' => 'USD', 'rate_date' => '2025-03-14', 'czk_per_unit' => 23.0]);
+    $db->insert('exchange_rate_months', ['currency' => 'USD', 'year_month' => '2025-03', 'fetched_at' => '2025-03-15 10:00:00']);
+    $db->insert('exchange_rate_months', ['currency' => 'USD', 'year_month' => '2025-02', 'fetched_at' => '2025-03-15 10:00:00']);
+    $http = new FakeHttpClient([cnbMonth(['2025-03-14' => 23.0, '2025-03-28' => 22.1])]);
+    $rates = new ExchangeRates($db, $http);
+    assertSame(22.1, $rates->czkPerUnit('USD', '2025-03-30'), 'po konci měsíce se stáhne celý');
+    assertSame(1, count($http->requests));
+    assertSame(22.1, $rates->czkPerUnit('USD', '2025-03-31'));
+    assertSame(1, count($http->requests), 'kompletní měsíc se už znovu nestahuje');
+});
+
+test('ExchangeRates: při výpadku ČNB se použije uložený kurz', function (): void {
+    $db = testDatabase();
+    $month = substr(Clock::todayLocal(), 0, 7);
+    $yesterday = (new DateTimeImmutable(Clock::todayLocal()))->modify('-1 day')->format('Y-m-d');
+    $db->insert('exchange_rates', ['currency' => 'EUR', 'rate_date' => $month . '-01', 'czk_per_unit' => 24.5]);
+    $db->insert('exchange_rate_months', ['currency' => 'EUR', 'year_month' => $month, 'fetched_at' => '2000-01-01 00:00:00']);
+    $previous = (new DateTimeImmutable(Clock::todayLocal()))->modify('-7 days')->format('Y-m');
+    if ($previous !== $month) {
+        $db->insert('exchange_rate_months', ['currency' => 'EUR', 'year_month' => $previous, 'fetched_at' => '2099-01-01 00:00:00']);
+    }
+    $http = new FakeHttpClient([new HttpResponse(503, [], 'down'), new HttpResponse(503, [], 'down')]);
+    $rates = new ExchangeRates($db, $http);
+    assertSame(24.5, $rates->czkPerUnit('EUR', max($month . '-01', $yesterday)));
+    $requests = count($http->requests);
+    assertSame(24.5, $rates->czkPerUnit('EUR', max($month . '-01', $yesterday)));
+    assertSame($requests, count($http->requests), 'neúspěšné stažení se v jednom běhu neopakuje');
+});
+
+test('CsvImporter: soubor ve Windows-1250 (český Excel) se převede celý', function (): void {
+    $db = testDatabase();
+    $accountId = seedAccount($db, 'CZK', 20);
+    $importer = new CsvImporter(new Ledger($db, new ExchangeRates($db, new FakeHttpClient([]))));
+    $file = tempnam(sys_get_temp_dir(), 'csv');
+    file_put_contents($file, (string) iconv('UTF-8', 'Windows-1250', "Datum;Typ;Částka;Fanoušek\n2026-09-02;Předplatné;100;Novák\n"));
+    $data = $importer->read($file);
+    assertSame(['Datum', 'Typ', 'Částka', 'Fanoušek'], $data['headers']);
+    assertSame('Novák', $data['rows'][0][3]);
+    $result = $importer->prepare($file, ['date' => 0, 'type' => 1, 'gross' => 2, 'fan' => 3], ['account_id' => $accountId, 'currency' => 'CZK', 'fee_percent' => 20.0, 'timezone' => 'UTC']);
+    assertSame('subscription', $result['rows'][0]['row']['type'], 'typ „Předplatné“ rozpoznán');
+    assertSame('Novák', $result['rows'][0]['fan']);
+    unlink($file);
+});
+
+test('Stats: cena za obrázek jen z nákladů s počtem kusů', function (): void {
+    $db = testDatabase();
+    $accountId = seedAccount($db);
+    $modelId = (int) $db->scalar('SELECT model_id FROM accounts WHERE id = :id', ['id' => $accountId]);
+    foreach ([[50000, 100], [100000, null]] as [$amount, $quantity]) {
+        $db->insert('costs', ['model_id' => $modelId, 'category' => 'generation', 'incurred_on' => '2025-04-01', 'amount_minor' => $amount,
+            'currency' => 'CZK', 'fx_rate' => 1, 'amount_czk_minor' => $amount, 'quantity' => $quantity, 'created_at' => Clock::nowUtc()]);
+    }
+    $lifetime = (new Stats($db))->modelLifetime($modelId);
+    assertSame(500, $lifetime['cost_per_image'], '500 Kč / 100 ks = 5 Kč');
+    assertSame(150000, $lifetime['costs']);
+});

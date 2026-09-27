@@ -96,7 +96,7 @@ V profilu modelky vyplň doménu (např. `nessawren.com`) a nasměruj ji (DNS + 
 Fanvue vrací částky v centech; měnu účtu nastav v systému (výchozí USD).
 
 ## Zabezpečení
-- Přihlášení: hesla Argon2id, **2FA (TOTP)**, omezení pokusů (5 / 15 min na IP+účet, 20 / h na IP, 50 / h na účet), stejná odezva pro neexistující účet, nová session po přihlášení.
+- Přihlášení: hesla Argon2id, **2FA (TOTP)**, omezení pokusů (5 / 15 min na IP+účet, 20 / h na IP, 50 / h na účet), stejná odezva pro neexistující účet, nová session po přihlášení, změna hesla odhlásí všechna ostatní zařízení.
 - Session: HttpOnly, Secure, SameSite=Lax, odhlášení po 2 h nečinnosti a max. po 12 h.
 - Každý formulář má **CSRF token** a kontroluje se hlavička Origin.
 - Hlavičky: přísná Content-Security-Policy (bez inline skriptů), X-Frame-Options, nosniff, HSTS, Referrer-Policy, `noindex` a `no-store` pro administraci.
@@ -143,4 +143,3 @@ docs/          rešerše a strategie
 - Jeden tým / jeden provoz: všichni přihlášení uživatelé vidí všechno (bez rolí).
 - OnlyFans a Fansly nemají API → ruční zadání nebo CSV.
 - Kurzy ČNB: pokud je ČNB nedostupná, systém nechá zadat kurz ručně (nic nepočítá odhadem).
-- Změna hesla neodhlásí jiná zařízení s běžící session (vyprší nejpozději za 12 h).

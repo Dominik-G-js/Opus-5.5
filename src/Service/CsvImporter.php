@@ -57,13 +57,28 @@ final class CsvImporter
         if ($size <= 0 || $size > self::MAX_BYTES) {
             throw new RuntimeException('CSV musí mít 1 B – 5 MB.');
         }
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
+        $content = file_get_contents($path);
+        if ($content === false) {
             throw new RuntimeException('CSV nelze otevřít.');
         }
+        $content = (string) preg_replace('/^\xEF\xBB\xBF/', '', $content);
+        // Český Excel ukládá CSV často ve Windows-1250 — převádí se celý soubor, ne jen hlavička.
+        if (!mb_check_encoding($content, 'UTF-8')) {
+            // mbstring Windows-1250 nepodporuje, proto iconv.
+            $converted = function_exists('iconv') ? @iconv('Windows-1250', 'UTF-8', $content) : false;
+            if ($converted === false) {
+                throw new RuntimeException('CSV není v UTF-8 ani ve Windows-1250. Ulož ho jako „CSV UTF-8“.');
+            }
+            $content = $converted;
+        }
+        $handle = fopen('php://temp', 'w+b');
+        if ($handle === false) {
+            throw new RuntimeException('CSV nelze zpracovat.');
+        }
         try {
+            fwrite($handle, $content);
+            rewind($handle);
             $firstLine = (string) fgets($handle);
-            $firstLine = (string) preg_replace('/^\xEF\xBB\xBF/', '', $firstLine);
             $delimiter = $this->detectDelimiter($firstLine);
             $headers = array_map(static fn (?string $h): string => trim((string) $h), str_getcsv(rtrim($firstLine, "\r\n"), $delimiter, '"', ''));
             if (count($headers) < 2) {
@@ -81,11 +96,6 @@ final class CsvImporter
             }
         } finally {
             fclose($handle);
-        }
-        foreach ($headers as $i => $header) {
-            if (!mb_check_encoding($header, 'UTF-8')) {
-                $headers[$i] = (string) mb_convert_encoding($header, 'UTF-8', 'Windows-1250');
-            }
         }
 
         return ['delimiter' => $delimiter, 'headers' => $headers, 'rows' => $rows];
@@ -118,12 +128,7 @@ final class CsvImporter
                     : $options['currency'];
                 $gross = isset($mapping['gross']) ? Money::parseToMinor($this->cell($row, $mapping['gross'])) : null;
                 $net = isset($mapping['net']) ? Money::parseToMinor($this->cell($row, $mapping['net'])) : null;
-                if ($net === null) {
-                    $net = (int) round((int) $gross * (1 - $options['fee_percent'] / 100));
-                }
-                if ($gross === null) {
-                    $gross = $options['fee_percent'] < 100 ? (int) round($net / (1 - $options['fee_percent'] / 100)) : $net;
-                }
+                [$gross, $net] = Money::completeGrossNet($gross, $net, $options['fee_percent']);
                 $type = isset($mapping['type']) ? $this->guessType($this->cell($row, $mapping['type'])) : 'other';
                 $fan = isset($mapping['fan']) ? $this->cell($row, $mapping['fan']) : '';
                 $note = isset($mapping['note']) ? mb_substr($this->cell($row, $mapping['note']), 0, 500) : null;

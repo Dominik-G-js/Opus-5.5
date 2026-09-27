@@ -150,3 +150,25 @@ test('CsvExport: ochrana proti formula injection, čísla zůstávají čísly',
     assertTrue(str_contains($response->body(), "'=1+1;5"));
     assertSame('attachment; filename="prijmy_2026-09.csv"', $response->header('Content-Disposition'));
 });
+
+test('Money: doplnění hrubé / čisté částky podle poplatku', function (): void {
+    assertSame([1000, 800], Money::completeGrossNet(1000, null, 20));
+    assertSame([1000, 800], Money::completeGrossNet(null, 800, 20));
+    assertSame([1000, 700], Money::completeGrossNet(1000, 700, 20), 'zadané obě částky se nemění');
+    assertSame([500, 500], Money::completeGrossNet(null, 500, 100));
+    assertThrows(InvalidArgumentException::class, fn () => Money::completeGrossNet(null, null, 20));
+    assertThrows(InvalidArgumentException::class, fn () => Money::completeGrossNet(100, null, 120));
+});
+
+test('Str: dlouhý slug nekončí pomlčkou', function (): void {
+    $slug = Str::slug(str_repeat('a', 79) . ' bbbb');
+    assertSame(str_repeat('a', 79), $slug);
+    assertTrue(preg_match('/^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/', Str::slug(str_repeat('ab ', 40))) === 1);
+});
+
+test('ImageStore: převod memory_limit a kontrola paměti', function (): void {
+    assertSame(128 * 1024 * 1024, App\Service\ImageStore::bytesFromIni('128M'));
+    assertSame(2 * 1024 ** 3, App\Service\ImageStore::bytesFromIni('2G'));
+    assertSame(-1, App\Service\ImageStore::bytesFromIni('-1'));
+    App\Service\ImageStore::ensureMemoryForDecoding(1000 * 1000); // malý obrázek projde vždy
+});

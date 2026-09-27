@@ -22,9 +22,9 @@ final class Str
         $ascii = function_exists('transliterator_transliterate')
             ? (string) transliterator_transliterate('Any-Latin; Latin-ASCII; Lower()', $text)
             : self::transliterateLatin($text);
-        $slug = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($ascii)), '-');
+        $slug = (string) preg_replace('/[^a-z0-9]+/', '-', strtolower($ascii));
 
-        return substr($slug, 0, 80) ?: 'model';
+        return trim(substr($slug, 0, 80), '-') ?: 'model';
     }
 
     public static function transliterateLatin(string $text): string

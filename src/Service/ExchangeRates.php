@@ -8,6 +8,7 @@ use App\Database\Database;
 use App\Http\HttpClient;
 use App\Http\HttpClientException;
 use App\Support\Clock;
+use App\Support\Logger;
 use DateTimeImmutable;
 
 /**
@@ -19,9 +20,13 @@ final class ExchangeRates
     private const API = 'https://api.cnb.cz/cnbapi/exrates/daily-currency-month';
     private const CURRENT_MONTH_TTL = 3600;
 
+    /** @var array<string, true> Měsíce, jejichž stažení v tomto běhu selhalo — neopakovat (každý pokus = timeout). */
+    private array $failedFetches = [];
+
     public function __construct(
         private readonly Database $db,
         private readonly HttpClient $http,
+        private readonly ?Logger $logger = null,
     ) {
     }
 
@@ -69,24 +74,49 @@ final class ExchangeRates
 
     private function ensureMonth(string $currency, string $yearMonth, string $today): void
     {
+        if ($yearMonth > substr($today, 0, 7)) {
+            return;
+        }
         $fetchedAt = $this->db->scalar(
             'SELECT fetched_at FROM exchange_rate_months WHERE currency = :c AND year_month = :m',
             ['c' => $currency, 'm' => $yearMonth]
         );
-        $isCurrentMonth = $yearMonth === substr($today, 0, 7);
-        if ($fetchedAt !== null) {
-            if (!$isCurrentMonth) {
-                return; // uzavřený měsíc se už nezmění
-            }
-            $age = time() - (new DateTimeImmutable($fetchedAt . ' UTC'))->getTimestamp();
-            if ($age < self::CURRENT_MONTH_TTL) {
-                return;
-            }
-        }
-        if ($yearMonth > substr($today, 0, 7)) {
+        if ($fetchedAt !== null && !$this->needsRefresh((string) $fetchedAt, $yearMonth, $today)) {
             return;
         }
-        $this->fetchMonth($currency, $yearMonth);
+        $key = $currency . ':' . $yearMonth;
+        if (isset($this->failedFetches[$key])) {
+            if ($fetchedAt === null) {
+                throw new ExchangeRateUnavailable("Kurzy ČNB pro {$currency} {$yearMonth} nejsou dostupné. Zadej kurz ručně.");
+            }
+
+            return;
+        }
+        try {
+            $this->fetchMonth($currency, $yearMonth);
+        } catch (ExchangeRateUnavailable $e) {
+            $this->failedFetches[$key] = true;
+            if ($fetchedAt === null) {
+                throw $e; // pro tento měsíc nemáme vůbec nic
+            }
+            // Uložené kurzy máme, jen je nešlo obnovit — použijeme je (poslední vyhlášený kurz).
+            $this->logger?->warning('cnb.refresh_failed', ['currency' => $currency, 'month' => $yearMonth, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Uzavřený měsíc stačí mít stažený jednou — ale jen pokud se stahoval až po jeho konci.
+     * Běžící měsíc se obnovuje po hodině.
+     */
+    private function needsRefresh(string $fetchedAtUtc, string $yearMonth, string $today): bool
+    {
+        $fetchedAt = new DateTimeImmutable($fetchedAtUtc . ' UTC');
+        if ($yearMonth === substr($today, 0, 7)) {
+            return time() - $fetchedAt->getTimestamp() >= self::CURRENT_MONTH_TTL;
+        }
+        $monthEnd = new DateTimeImmutable($yearMonth . '-01 00:00:00', Clock::localZone());
+
+        return $fetchedAt < $monthEnd->modify('first day of next month');
     }
 
     /** @throws ExchangeRateUnavailable */

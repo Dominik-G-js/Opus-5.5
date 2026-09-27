@@ -133,12 +133,16 @@ final class ImageStore
             ? (string) $image['public_id']
             : bin2hex(random_bytes(16));
 
-        $source = $this->load($this->privatePath($image), (string) $image['mime']);
-        $width = imagesx($source);
-        $height = imagesy($source);
+        $width = (int) $image['width'];
+        $height = (int) $image['height'];
         $scale = min(1.0, self::PUBLIC_MAX_SIDE / max($width, $height));
         $targetW = max(1, (int) round($width * $scale));
         $targetH = max(1, (int) round($height * $scale));
+        self::ensureMemoryForDecoding($width * $height + $targetW * $targetH);
+
+        $source = $this->load($this->privatePath($image), (string) $image['mime']);
+        $width = imagesx($source);
+        $height = imagesy($source);
         $canvas = imagecreatetruecolor($targetW, $targetH);
         // Průhlednost (PNG/WebP) → bílé pozadí, JPEG průhlednost neumí.
         imagefill($canvas, 0, 0, (int) imagecolorallocate($canvas, 255, 255, 255));
@@ -174,6 +178,43 @@ final class ImageStore
         }
         $this->db->delete('images', ['id' => $image['id']]);
         $this->db->run('UPDATE models SET avatar_image_id = NULL WHERE avatar_image_id = :id', ['id' => $image['id']]);
+    }
+
+    /**
+     * GD drží obrázek nekomprimovaně (~5 B/px s režií). Nedostatek paměti je fatální chyba, kterou nejde zachytit,
+     * proto se paměť ověří předem a případně se zkusí navýšit memory_limit.
+     */
+    public static function ensureMemoryForDecoding(int $pixels): void
+    {
+        $needed = memory_get_usage() + $pixels * 5 + 16 * 1024 * 1024;
+        $limit = self::bytesFromIni((string) ini_get('memory_limit'));
+        if ($limit < 0 || $needed <= $limit) {
+            return;
+        }
+        if (@ini_set('memory_limit', (string) $needed) === false || self::bytesFromIni((string) ini_get('memory_limit')) < $needed) {
+            throw new RuntimeException(sprintf(
+                'Na zpracování obrázku je potřeba cca %d MB paměti, server povoluje %d MB. Nahraj menší verzi (např. max. 2048 px).',
+                (int) ceil($needed / 1048576),
+                (int) floor($limit / 1048576)
+            ));
+        }
+    }
+
+    /** Převod hodnoty jako „128M“ nebo „1G“ na bajty; -1 = bez omezení. */
+    public static function bytesFromIni(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || $value === '-1') {
+            return -1;
+        }
+        $number = (int) $value;
+
+        return match (strtolower(substr($value, -1))) {
+            'g' => $number * 1024 ** 3,
+            'm' => $number * 1024 ** 2,
+            'k' => $number * 1024,
+            default => $number,
+        };
     }
 
     private function load(string $path, string $mime): GdImage

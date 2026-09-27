@@ -12,6 +12,8 @@ final class Auth
 {
     private const SESSION_USER = '_uid';
     private const SESSION_PENDING = '_2fa_pending';
+    /** Otisk hashe hesla v session: po změně hesla přestanou platit všechna ostatní přihlášení. */
+    private const SESSION_PASSWORD_FINGERPRINT = '_pwv';
     private const PENDING_TTL = 300;
 
     /** @var array<string, mixed>|null */
@@ -74,6 +76,18 @@ final class Auth
         $this->csrf->rotate();
         $this->db->update('users', ['last_login_at' => Clock::nowUtc()], ['id' => $userId]);
         $this->user = null;
+        $this->rememberPasswordFingerprint();
+    }
+
+    /** Po změně hesla: aktuální session zůstane platná, ostatní se odhlásí. */
+    public function rememberPasswordFingerprint(): void
+    {
+        $this->user = null;
+        $id = $this->session->get(self::SESSION_USER);
+        $hash = is_int($id) ? $this->db->scalar('SELECT password_hash FROM users WHERE id = :id', ['id' => $id]) : null;
+        if (is_string($hash)) {
+            $this->session->set(self::SESSION_PASSWORD_FINGERPRINT, self::fingerprint($hash));
+        }
     }
 
     /** @return array<string, mixed>|null */
@@ -86,12 +100,22 @@ final class Auth
         if (!is_int($id)) {
             return null;
         }
-        $this->user = $this->db->one('SELECT * FROM users WHERE id = :id', ['id' => $id]);
-        if ($this->user === null) {
+        $user = $this->db->one('SELECT * FROM users WHERE id = :id', ['id' => $id]);
+        $fingerprint = $this->session->get(self::SESSION_PASSWORD_FINGERPRINT);
+        if ($user === null || !is_string($fingerprint) || !hash_equals(self::fingerprint((string) $user['password_hash']), $fingerprint)) {
+            // Účet smazaný nebo heslo mezitím změněné → tahle session už neplatí.
             $this->session->remove(self::SESSION_USER);
+            $this->session->remove(self::SESSION_PASSWORD_FINGERPRINT);
+
+            return null;
         }
 
-        return $this->user;
+        return $this->user = $user;
+    }
+
+    private static function fingerprint(string $passwordHash): string
+    {
+        return hash('sha256', $passwordHash);
     }
 
     public function logout(): void
