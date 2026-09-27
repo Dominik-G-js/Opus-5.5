@@ -5,44 +5,18 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\Controller;
+use App\Form\ModelForm;
+use App\Kernel\Services;
 use App\Kernel\Request;
 use App\Kernel\Response;
+use App\Service\ModelImportException;
+use App\Service\ModelImporter;
 use App\Service\Stats;
 use App\Support\Clock;
-use App\Support\Labels;
 use App\Support\Str;
-use App\Support\Validator;
 
 final class ModelController extends Controller
 {
-    public const MIN_PERSONA_AGE = 21;
-
-    /** Textová pole profilu: název sloupce => [popisek, max. délka]. */
-    private const TEXT_FIELDS = [
-        'niche' => ['Nika', 200],
-        'tagline' => ['Slogan', 200],
-        'public_bio' => ['Veřejné bio', 2000],
-        'backstory' => ['Příběh postavy', 5000],
-        'personality' => ['Povaha a styl komunikace', 3000],
-        'look_face' => ['Obličej', 1000],
-        'look_hair' => ['Vlasy', 1000],
-        'look_eyes' => ['Oči', 500],
-        'look_body' => ['Postava', 1000],
-        'look_skin' => ['Pleť', 500],
-        'look_marks' => ['Poznávací znaky', 1000],
-        'look_style' => ['Styl a oblečení', 2000],
-        'base_model' => ['Základní model', 255],
-        'lora_name' => ['Název LoRA', 255],
-        'lora_trigger' => ['Trigger slovo', 100],
-        'lora_weight' => ['Síla LoRA', 50],
-        'lora_location' => ['Umístění LoRA souboru', 500],
-        'default_seed' => ['Výchozí seed', 50],
-        'default_negative' => ['Výchozí negativní prompt', 3000],
-        'seo_title' => ['SEO titulek', 70],
-        'seo_description' => ['SEO popis', 170],
-        'notes' => ['Poznámky', 5000],
-    ];
-
     public function index(Request $request): Response
     {
         $models = $this->app->db->all(
@@ -64,7 +38,7 @@ final class ModelController extends Controller
 
     public function store(Request $request): Response
     {
-        [$data, $validator] = $this->validate($request, null);
+        [$data, $validator] = $this->form()->validate($request->form(), null);
         if ($validator->fails()) {
             return $this->backWithErrors($request, $validator, '/models/new');
         }
@@ -73,6 +47,48 @@ final class ModelController extends Controller
         $this->flash('success', 'AI modelka přidána. Doplň master prompt, nahraj referenční fotky a přidej účty na platformách.');
 
         return $this->redirect('/models/' . $id);
+    }
+
+    public function importForm(Request $request): Response
+    {
+        return $this->render('models/import', ['title' => 'Import modelky ze souboru', 'maxBytes' => ModelImporter::MAX_BYTES]);
+    }
+
+    public function import(Request $request): Response
+    {
+        $file = $request->file('model_file');
+        if ($file === null || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return $this->backWithErrors($request, ['model_file' => 'Vyber soubor .json s modelkou.'], '/models/import');
+        }
+        $tmp = (string) $file['tmp_name'];
+        $extension = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($tmp);
+        if (!is_uploaded_file($tmp) || $extension !== 'json' || !in_array($mime, ['application/json', 'text/plain'], true)) {
+            return $this->backWithErrors($request, ['model_file' => 'Soubor musí být JSON (přípona .json).'], '/models/import');
+        }
+        if ((int) $file['size'] > ModelImporter::MAX_BYTES) {
+            return $this->backWithErrors($request, ['model_file' => 'Soubor je větší než 1 MB.'], '/models/import');
+        }
+
+        try {
+            $result = Services::modelImporter($this->app)->importJson((string) file_get_contents($tmp));
+        } catch (ModelImportException $e) {
+            $errors = ['model_file' => 'Nic se neuložilo — v souboru je ' . count($e->errors) . ' chyb:'];
+            foreach (array_slice($e->errors, 0, 30) as $i => $message) {
+                $errors['model_file_' . $i] = $message;
+            }
+
+            return $this->backWithErrors($request, $errors, '/models/import');
+        }
+
+        $this->app->logger->info('model.imported', ['id' => $result['model_id'], 'name' => $result['name']]);
+        $c = $result['counts'];
+        $this->flash('success', "Modelka {$result['name']} importována: {$c['prompts']} promptů, {$c['accounts']} účtů, {$c['links']} odkazů, {$c['tools']} AI nástrojů.");
+        foreach (array_slice($result['warnings'], 0, 10) as $warning) {
+            $this->flash('info', 'Upozornění: ' . $warning);
+        }
+
+        return $this->redirect('/models/' . $result['model_id']);
     }
 
     public function show(Request $request): Response
@@ -138,7 +154,7 @@ final class ModelController extends Controller
     public function update(Request $request): Response
     {
         $model = $this->findOrFail('models', $request->intParam('id'));
-        [$data, $validator] = $this->validate($request, (int) $model['id']);
+        [$data, $validator] = $this->form()->validate($request->form(), (int) $model['id']);
         if ($validator->fails()) {
             return $this->backWithErrors($request, $validator, '/models/' . $model['id'] . '/edit');
         }
@@ -217,51 +233,8 @@ final class ModelController extends Controller
         ]);
     }
 
-    /** @return array{0: array<string, mixed>, 1: Validator} */
-    private function validate(Request $request, ?int $modelId): array
+    private function form(): ModelForm
     {
-        $v = new Validator();
-        $data = [
-            'name' => $v->required('name', $request->input('name'), 'Jméno', 100),
-            'status' => $v->oneOf('status', $request->input('status'), Labels::group('model_status'), 'Stav'),
-            'persona_age' => $v->int('persona_age', $request->input('persona_age'), 'Věk postavy', self::MIN_PERSONA_AGE, 99),
-            'page_lang' => $v->oneOf('page_lang', $request->input('page_lang', 'en'), Labels::group('page_lang'), 'Jazyk stránky'),
-            'page_published' => $request->checkbox('page_published') ? 1 : 0,
-            'page_domain' => $v->domain('page_domain', $request->input('page_domain'), 'Vlastní doména'),
-        ];
-        foreach (self::TEXT_FIELDS as $field => [$label, $max]) {
-            $value = in_array($field, ['default_negative', 'public_bio', 'backstory', 'personality'], true)
-                ? trim($request->rawInput($field))
-                : $request->input($field);
-            $data[$field] = $v->optional($field, $value, $label, $max);
-        }
-
-        $slug = $request->input('slug');
-        $slug = $slug === '' ? Str::slug($data['name']) : $slug;
-        if (preg_match('/^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/', $slug) !== 1) {
-            $v->addError('slug', 'URL slug: jen malá písmena bez diakritiky, číslice a pomlčky.');
-        } elseif ($this->app->db->scalar('SELECT 1 FROM models WHERE slug = :s AND id != :id', ['s' => $slug, 'id' => $modelId ?? 0]) !== null) {
-            $v->addError('slug', 'URL slug už používá jiná modelka.');
-        }
-        $data['slug'] = $slug;
-
-        if ($data['page_domain'] !== null) {
-            if ($data['page_domain'] === $this->app->urls->host()) {
-                $v->addError('page_domain', 'Doména nesmí být stejná jako doména administrace.');
-            } elseif ($this->app->db->scalar('SELECT 1 FROM models WHERE page_domain = :d AND id != :id', ['d' => $data['page_domain'], 'id' => $modelId ?? 0]) !== null) {
-                $v->addError('page_domain', 'Doménu už používá jiná modelka.');
-            }
-        }
-
-        if ($modelId !== null) {
-            $avatar = $request->input('avatar_image_id');
-            $data['avatar_image_id'] = $avatar === '' ? null : (
-                $this->app->db->scalar('SELECT id FROM images WHERE id = :i AND model_id = :m', ['i' => (int) $avatar, 'm' => $modelId]) !== null
-                    ? (int) $avatar
-                    : null
-            );
-        }
-
-        return [$data, $v];
+        return new ModelForm($this->app->db, $this->app->urls->host());
     }
 }

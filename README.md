@@ -24,7 +24,7 @@ Potřebuješ jen PHP 8.2 nebo novější — žádnou databázi ani webserver. A
    php -S 127.0.0.1:8000 -t public bin/dev-router.php
    ```
    `install` se zeptá na jméno a heslo (min. 12 znaků) a připraví prázdnou databázi.
-4. **Otevři v prohlížeči** <http://127.0.0.1:8000/admin>, přihlas se a tlačítkem **+ Přidat AI modelku** (v levém menu nebo na přehledu) založ první modelku.
+4. **Otevři v prohlížeči** <http://127.0.0.1:8000/admin>, přihlas se a tlačítkem **+ Přidat AI modelku** (v levém menu nebo na přehledu) založ první modelku — nebo v sekci Modelky klikni na **Importovat ze souboru** a nahraj hotovou modelku `models/tia-tempest.json` (profil, 24 promptů, účty, odkazy).
 
 Když chybí PHP rozšíření, aplikace to napíše (např. „Chybí PHP rozšíření sodium“) — stačí ho zapnout v `php.ini`.
 
@@ -35,7 +35,7 @@ Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 | Oblast | Funkce |
 |---|---|
 | **Přehled** | období měsíc / 7 dní / 30 dní / od začátku roku se srovnáním s předchozím obdobím, čistý příjem, hrubé tržby, poplatky, náklady a zisk s průběhem, graf příjmů podle typu plateb (tooltip s rozpadem podle platforem), podíl platforem s AI politikou, karty modelek (tržby, změna, platformy, nejziskovější typ, zisk a ROI), nejvyšší platby, měsíční cíl (výchozí 10 000 Kč zisku) s odhadem a potřebným tempem, příjmy vs. náklady za 12 měsíců, top fanoušci, prokliky podle zdroje |
-| **Modelky** | profil a character bible (vzhled, povaha, příběh), technika (základní model, LoRA, trigger, seed), použité AI nástroje, tisknutelná „Character bible“ |
+| **Modelky** | profil a character bible (vzhled, povaha, příběh), technika (základní model, LoRA, trigger, seed), použité AI nástroje, tisknutelná „Character bible“, **import celé modelky ze souboru JSON** (profil, prompty, účty, odkazy — viz [`models/`](models/README.md)) |
 | **Prompty** | knihovna promptů podle typu, master prompt předvyplněný z character bible, hodnocení, **historie verzí s obnovením** |
 | **Obrázky** | soukromé úložiště (originály i s metadaty), referenční fotky, zveřejnění na landing page jako **očištěná kopie bez metadat** (prompty z ComfyUI neuniknou) |
 | **Příjmy** | ruční zadání, **import CSV** z libovolné platformy (mapování sloupců, bez duplicit), **Fanvue API** (automaticky), přepočet na CZK **kurzem ČNB ke dni platby**, export CSV pro účetní |
@@ -161,10 +161,11 @@ python3 tests/e2e/integration.py   # Fanvue OAuth + synchronizace a kurzy ČNB p
 ## Struktura
 ```
 public/        webroot (index.php, CSS, JS, .htaccess)
-src/           aplikace (Kernel, Security, Service, Integration/Fanvue, Controller)
+src/           aplikace (Kernel, Security, Form, Service, Integration/Fanvue, Controller)
 templates/     šablony (administrace + veřejná landing page)
 migrations/    schéma databáze a výchozí data (platformy, AI nástroje s cenami)
-bin/console    instalace, uživatelé, synchronizace, úklid
+bin/console    instalace, uživatelé, synchronizace, úklid, import modelky (model:import)
+models/        hotové modelky k importu (JSON) a popis formátu
 storage/       databáze, obrázky, logy (mimo web)
 tests/         testy (bez závislostí)
 docs/          rešerše a strategie

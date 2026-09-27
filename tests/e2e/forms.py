@@ -318,6 +318,35 @@ def main():
             check(' style="' not in page and "<script>" not in page, f"přehled {query}: bez inline stylů a skriptů (CSP)")
         check("Přehled · 20" in get("?range=nesmysl").text, "neznámé období → běžící měsíc")
 
+        # ---------------------------------------------------------------- 12b) import modelky ze souboru
+        check("Importovat ze souboru" in get("/models").text, "seznam modelek: tlačítko Importovat ze souboru")
+        get("/models/import")
+        check(has_error(post("/models/import", {}), "Vyber soubor .json"), "import: bez souboru")
+        check(has_error(post("/models/import", {}, files={"model_file": ("tia.txt", b"{}", "text/plain")}), "musí být JSON"), "import: jiná přípona než .json odmítnuta")
+        check(has_error(post("/models/import", {}, files={"model_file": ("x.json", b"\x89PNG\r\n\x1a\n" + image_bytes("png"), "application/json")}), "musí být JSON"), "import: binární soubor s příponou .json odmítnut")
+        page = follow(post("/models/import", {}, files={"model_file": ("bad.json", b"{nope", "application/json")})).text
+        check("Nic se neuložilo" in page and "není platný JSON" in page, "import: neplatný JSON → souhrn chyb")
+        before_models = app.db("SELECT COUNT(*) FROM models")[0][0]
+        with open(os.path.join(app.dir, "models", "tia-tempest.json"), "rb") as f:
+            tia_json = f.read()
+        r = post("/models/import", {}, files={"model_file": ("tia-tempest.json", tia_json, "application/json")})
+        tia = app.db("SELECT id FROM models WHERE slug = 'tia-tempest'")
+        check(r.status_code == 303 and tia != [] and r.headers["Location"].endswith(f"/models/{tia[0][0] if tia else 0}"), "import Tia Tempest → přesměrování na profil", str(r.status_code))
+        tia_id = tia[0][0] if tia else 0
+        page = follow(r).text
+        check("Modelka Tia Tempest importována: 24 promptů, 5 účtů, 5 odkazů, 6 AI nástrojů." in page, "import: souhrn na profilu", str(flashes(page)))
+        check(app.db("SELECT COUNT(*) FROM prompts WHERE model_id = ?", tia_id)[0][0] == 24 and app.db("SELECT COUNT(*) FROM accounts WHERE model_id = ?", tia_id)[0][0] == 5
+              and app.db("SELECT COUNT(*) FROM links WHERE model_id = ?", tia_id)[0][0] == 5 and app.db("SELECT COUNT(*) FROM model_tools WHERE model_id = ?", tia_id)[0][0] == 6,
+              "import: prompty, účty, odkazy a nástroje v databázi")
+        check("Tia — master postavy" in page and "t1atmpst" in page and "tiatempest" in page, "profil Tia: prompty, LoRA trigger a účty")
+        check("t1atmpst, photo of a 25-year-old woman" in get(f"/models/{tia_id}/bible").text, "character bible Tia obsahuje master prompt")
+        page = follow(post("/models/import", {}, files={"model_file": ("tia-tempest.json", tia_json, "application/json")})).text
+        check("URL slug už používá" in page and app.db("SELECT COUNT(*) FROM models")[0][0] == before_models + 1, "opakovaný import odmítnut, nic navíc se neuložilo")
+        r = s.post(A + "/models/import", files={"model_file": ("tia-tempest.json", tia_json, "application/json")}, allow_redirects=False)
+        check(r.status_code in (400, 403, 419) and app.db("SELECT COUNT(*) FROM models")[0][0] == before_models + 1, "import bez CSRF tokenu odmítnut", str(r.status_code))
+        r = app.console("model:import", "models/tia-tempest.json")
+        check(r.returncode == 1 and "URL slug už používá" in r.stdout, "CLI import: stejná chyba a návratový kód 1", r.stdout[:200])
+
         # ---------------------------------------------------------------- 13) chybové stránky
         get("/neexistuje", 404)
         check("Zpět do administrace" in s.get(A + "/neexistuje").text, "404 s odkazem zpět")

@@ -44,8 +44,8 @@ $input = static function (string $key, string $label, string $hint = '') use ($v
       </div>
       <div class="field">
         <label for="persona_age">Věk postavy *</label>
-        <input type="number" id="persona_age" name="persona_age" min="<?= App\Controller\Admin\ModelController::MIN_PERSONA_AGE ?>" max="99" required value="<?= $val('persona_age', 24) ?>">
-        <p class="hint">Minimálně <?= App\Controller\Admin\ModelController::MIN_PERSONA_AGE ?> let a postava musí jednoznačně vypadat dospěle.</p>
+        <input type="number" id="persona_age" name="persona_age" min="<?= App\Form\ModelForm::MIN_PERSONA_AGE ?>" max="99" required value="<?= $val('persona_age', 24) ?>">
+        <p class="hint">Minimálně <?= App\Form\ModelForm::MIN_PERSONA_AGE ?> let a postava musí jednoznačně vypadat dospěle.</p>
         <?= $v->error('persona_age') ?>
       </div>
       <?= $input('niche', 'Nika', 'Např. fitness girl next door, cosplay gamerka, alt/goth…') ?>

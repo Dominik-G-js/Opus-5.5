@@ -81,6 +81,19 @@ final class Database
         return $value === false ? null : $value;
     }
 
+    /**
+     * ID z uživatelského vstupu, pokud je to kladné číslo a řádek existuje; jinak null.
+     * Název tabulky pochází vždy z kódu.
+     */
+    public function idIfExists(string $table, string $value): ?int
+    {
+        if (preg_match('/^[1-9]\d{0,17}$/', $value) !== 1) {
+            return null;
+        }
+
+        return $this->scalar("SELECT 1 FROM {$table} WHERE id = :id", ['id' => (int) $value]) === null ? null : (int) $value;
+    }
+
     /** @param array<string, mixed> $data */
     public function insert(string $table, array $data): int
     {

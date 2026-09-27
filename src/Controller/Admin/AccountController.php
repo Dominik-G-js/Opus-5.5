@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\Controller;
+use App\Form\AccountForm;
 use App\Kernel\Request;
 use App\Kernel\Response;
 use App\Service\Ledger;
 use App\Service\Stats;
 use App\Support\Clock;
-use App\Support\Labels;
-use App\Support\Validator;
 
 final class AccountController extends Controller
 {
@@ -30,7 +29,7 @@ final class AccountController extends Controller
     public function store(Request $request): Response
     {
         $model = $this->findOrFail('models', $request->intParam('id'));
-        [$data, $v] = $this->validate($request);
+        [$data, $v] = $this->form()->validate($request->form());
         if ($v->fails()) {
             return $this->backWithErrors($request, $v, '/models/' . $model['id'] . '/accounts/new');
         }
@@ -93,7 +92,7 @@ final class AccountController extends Controller
     public function update(Request $request): Response
     {
         $account = $this->findOrFail('accounts', $request->intParam('id'));
-        [$data, $v] = $this->validate($request);
+        [$data, $v] = $this->form()->validate($request->form());
         if ($v->fails()) {
             return $this->backWithErrors($request, $v, '/accounts/' . $account['id'] . '/edit');
         }
@@ -138,31 +137,8 @@ final class AccountController extends Controller
         return $this->app->db->all('SELECT * FROM platforms ORDER BY role, name');
     }
 
-    /** @return array{0: array<string, mixed>, 1: Validator} */
-    private function validate(Request $request): array
+    private function form(): AccountForm
     {
-        $v = new Validator();
-        $platformId = $this->optionalId($request->input('platform_id'), 'platforms');
-        if ($platformId === null) {
-            $v->addError('platform_id', 'Vyber platformu.');
-        }
-        $platform = $platformId !== null ? $this->findOrFail('platforms', $platformId) : null;
-        $fee = $request->input('fee_percent');
-        $currency = $request->input('currency');
-        $syncSince = $request->input('sync_since');
-
-        $data = [
-            'platform_id' => $platformId,
-            'handle' => ltrim($v->required('handle', $request->input('handle'), 'Uživatelské jméno', 100), '@'),
-            'profile_url' => $v->url('profile_url', $request->input('profile_url'), 'Odkaz na profil'),
-            'status' => $v->oneOf('status', $request->input('status'), Labels::group('account_status'), 'Stav'),
-            'currency' => $currency === '' ? (string) ($platform['default_currency'] ?? 'USD') : $v->currency('currency', $currency, 'Měna'),
-            'fee_percent' => $fee === '' ? (float) ($platform['default_fee_percent'] ?? 0) : $v->decimal('fee_percent', $fee, 'Poplatek %', 0, 100),
-            'show_on_page' => $request->checkbox('show_on_page') ? 1 : 0,
-            'sync_since' => $syncSince === '' ? null : $v->date('sync_since', $syncSince, 'Importovat od'),
-            'notes' => $v->optional('notes', trim($request->rawInput('notes')), 'Poznámky', 3000),
-        ];
-
-        return [$data, $v];
+        return new AccountForm($this->app->db);
     }
 }

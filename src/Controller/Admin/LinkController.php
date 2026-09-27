@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\Controller;
+use App\Form\LinkForm;
 use App\Kernel\Request;
 use App\Kernel\Response;
 use App\Support\Clock;
-use App\Support\Labels;
-use App\Support\Str;
-use App\Support\Validator;
 
 /**
  * Sledovací odkazy (do bia na TikTok/X/Reddit…) + odkazy na landing page modelky.
@@ -48,7 +46,7 @@ final class LinkController extends Controller
 
     public function store(Request $request): Response
     {
-        [$data, $v] = $this->validate($request, null);
+        [$data, $v] = $this->form()->validate($request->form(), null);
         if ($v->fails()) {
             return $this->backWithErrors($request, $v, '/links/new');
         }
@@ -73,7 +71,7 @@ final class LinkController extends Controller
     public function update(Request $request): Response
     {
         $link = $this->findOrFail('links', $request->intParam('id'));
-        [$data, $v] = $this->validate($request, (int) $link['id']);
+        [$data, $v] = $this->form()->validate($request->form(), (int) $link['id']);
         if ($v->fails()) {
             return $this->backWithErrors($request, $v, '/links/' . $link['id'] . '/edit');
         }
@@ -103,35 +101,8 @@ final class LinkController extends Controller
             : $this->app->urls->absolutePublic('/go/' . $link['code']);
     }
 
-    /** @return array{0: array<string, mixed>, 1: Validator} */
-    private function validate(Request $request, ?int $id): array
+    private function form(): LinkForm
     {
-        $v = new Validator();
-        $modelId = $this->optionalId($request->input('model_id'), 'models');
-        if ($modelId === null) {
-            $v->addError('model_id', 'Vyber modelku.');
-        }
-        $code = $request->input('code');
-        if ($code === '') {
-            $code = Str::randomCode(7);
-        } elseif (preg_match('/^[A-Za-z0-9_-]{3,40}$/', $code) !== 1) {
-            $v->addError('code', 'Kód: 3–40 znaků, písmena, číslice, - a _.');
-        }
-        if ($this->app->db->scalar('SELECT 1 FROM links WHERE code = :c AND id != :id', ['c' => $code, 'id' => $id ?? 0]) !== null) {
-            $v->addError('code', 'Kód už používá jiný odkaz.');
-        }
-        $data = [
-            'model_id' => $modelId,
-            'code' => $code,
-            'label' => $v->required('label', $request->input('label'), 'Popisek', 80),
-            'source' => $v->oneOf('source', $request->input('source'), Labels::group('link_source'), 'Zdroj'),
-            'target_url' => $v->url('target_url', $request->input('target_url'), 'Cílová adresa', true),
-            'is_active' => $request->checkbox('is_active') ? 1 : 0,
-            'is_premium' => $request->checkbox('is_premium') ? 1 : 0,
-            'show_on_page' => $request->checkbox('show_on_page') ? 1 : 0,
-            'sort_order' => $v->int('sort_order', $request->input('sort_order', '0'), 'Pořadí', 0, 999) ?? 0,
-        ];
-
-        return [$data, $v];
+        return new LinkForm($this->app->db);
     }
 }

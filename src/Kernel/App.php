@@ -152,6 +152,8 @@ final class App
         $models = fn () => new Admin\ModelController($this);
         $r->get($p . '/models', fn (Request $q) => $models()->index($q));
         $r->get($p . '/models/new', fn (Request $q) => $models()->create($q));
+        $r->get($p . '/models/import', fn (Request $q) => $models()->importForm($q));
+        $r->post($p . '/models/import', fn (Request $q) => $models()->import($q));
         $r->post($p . '/models', fn (Request $q) => $models()->store($q));
         $r->get($p . '/models/{id}', fn (Request $q) => $models()->show($q));
         $r->get($p . '/models/{id}/edit', fn (Request $q) => $models()->edit($q));

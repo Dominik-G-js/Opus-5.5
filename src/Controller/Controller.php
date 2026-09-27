@@ -131,11 +131,6 @@ abstract class Controller
 
     protected function optionalId(string $value, string $table): ?int
     {
-        if ($value === '' || preg_match('/^\d+$/', $value) !== 1) {
-            return null;
-        }
-        $exists = $this->app->db->scalar("SELECT 1 FROM {$table} WHERE id = :id", ['id' => (int) $value]);
-
-        return $exists === null ? null : (int) $value;
+        return $this->app->db->idIfExists($table, $value);
     }
 }

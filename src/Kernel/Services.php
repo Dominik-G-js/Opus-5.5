@@ -10,6 +10,7 @@ use App\Integration\Fanvue\FanvueSync;
 use App\Service\ExchangeRates;
 use App\Service\ImageStore;
 use App\Service\Ledger;
+use App\Service\ModelImporter;
 
 /**
  * Sestavení doménových služeb — sdílí ho webové controllery i CLI.
@@ -47,6 +48,11 @@ final class Services
             $app->config->string('fanvue.auth_base', FanvueClient::AUTH_BASE),
             $app->config->string('fanvue.api_base', FanvueClient::API_BASE),
         );
+    }
+
+    public static function modelImporter(App $app): ModelImporter
+    {
+        return new ModelImporter($app->db, $app->urls);
     }
 
     public static function fanvueSync(App $app): FanvueSync

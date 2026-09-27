@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Kernel;
 
+use App\Form\FormInput;
+
 final class Request
 {
     /** @var array<string, string> */
@@ -93,24 +95,26 @@ final class Request
         return $this->method === 'POST';
     }
 
+    /** Odeslaný formulář (POST) — sdílený vstup pro validaci v src/Form. */
+    public function form(): FormInput
+    {
+        return new FormInput($this->post);
+    }
+
     public function input(string $key, string $default = ''): string
     {
-        $value = $this->post[$key] ?? $default;
-
-        return is_string($value) ? trim($value) : $default;
+        return $this->form()->input($key, $default);
     }
 
     /** Surová hodnota bez trim (pro prompty, kde záleží na formátování). */
     public function rawInput(string $key): string
     {
-        $value = $this->post[$key] ?? '';
-
-        return is_string($value) ? str_replace("\r\n", "\n", $value) : '';
+        return $this->form()->rawInput($key);
     }
 
     public function checkbox(string $key): bool
     {
-        return isset($this->post[$key]) && $this->post[$key] !== '0';
+        return $this->form()->checkbox($key);
     }
 
     /** @return list<string> */

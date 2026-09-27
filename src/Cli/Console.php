@@ -11,6 +11,7 @@ use App\Kernel\Config;
 use App\Kernel\Services;
 use App\Security\Crypto;
 use App\Security\Passwords;
+use App\Service\ModelImportException;
 use App\Support\Clock;
 use RuntimeException;
 use Throwable;
@@ -32,6 +33,7 @@ final class Console
       sync [--account=ID]     Stáhne data z Fanvue API (pro cron, např. každou hodinu)
       rates:refresh           Stáhne aktuální kurzy ČNB (USD, EUR, GBP)
       cleanup                 Smaže staré pokusy o přihlášení a dočasné soubory
+      model:import <soubor>   Vytvoří modelku ze souboru JSON (profil, prompty, účty, odkazy)
 
     Heslo lze předat i proměnnou prostředí AMS_PASSWORD (pro automatizaci).
 
@@ -57,6 +59,7 @@ final class Console
                 'sync' => $this->sync($options),
                 'rates:refresh' => $this->ratesRefresh(),
                 'cleanup' => $this->cleanup(),
+                'model:import' => $this->modelImport($positional[0] ?? ''),
                 'help', '--help', '-h' => $this->help(),
                 default => $this->fail("Neznámý příkaz „{$command}“.\n\n" . self::HELP),
             };
@@ -224,6 +227,32 @@ final class Console
         }
         $runs = $app->db->run("DELETE FROM sync_runs WHERE started_at < :d", ['d' => gmdate('Y-m-d H:i:s', time() - 90 * 86400)])->rowCount();
         $this->line("✔ Smazáno: {$attempts} pokusů o přihlášení, {$files} dočasných souborů, {$runs} starých záznamů synchronizace.");
+
+        return 0;
+    }
+
+    private function modelImport(string $file): int
+    {
+        if ($file === '' || !is_file($file) || !is_readable($file)) {
+            throw new RuntimeException('Zadej cestu k souboru: php bin/console model:import models/tia-tempest.json');
+        }
+        $app = $this->app();
+        try {
+            $result = Services::modelImporter($app)->importJson((string) file_get_contents($file));
+        } catch (ModelImportException $e) {
+            $this->line('✘ Nic se neuložilo, chyby v souboru:');
+            foreach ($e->errors as $error) {
+                $this->line('  • ' . $error);
+            }
+
+            return 1;
+        }
+        $app->logger->info('model.imported', ['id' => $result['model_id'], 'name' => $result['name'], 'via' => 'cli']);
+        $c = $result['counts'];
+        $this->line("✔ Modelka {$result['name']} (ID {$result['model_id']}): {$c['prompts']} promptů, {$c['accounts']} účtů, {$c['links']} odkazů, {$c['tools']} AI nástrojů.");
+        foreach ($result['warnings'] as $warning) {
+            $this->line('  ! ' . $warning);
+        }
 
         return 0;
     }

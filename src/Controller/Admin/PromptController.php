@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\Controller;
+use App\Form\PromptForm;
 use App\Kernel\HttpException;
 use App\Kernel\Request;
 use App\Kernel\Response;
 use App\Support\Clock;
 use App\Support\Labels;
-use App\Support\Validator;
 
 /**
  * Knihovna promptů modelky s historií verzí — každá změna textu uloží předchozí verzi,
@@ -36,7 +36,7 @@ final class PromptController extends Controller
     public function store(Request $request): Response
     {
         $model = $this->findOrFail('models', $request->intParam('id'));
-        [$data, $validator] = $this->validate($request);
+        [$data, $validator] = $this->form()->validate($request->form());
         if ($validator->fails()) {
             return $this->backWithErrors($request, $validator, '/models/' . $model['id'] . '/prompts/new');
         }
@@ -74,7 +74,7 @@ final class PromptController extends Controller
     public function update(Request $request): Response
     {
         $prompt = $this->findOrFail('prompts', $request->intParam('id'));
-        [$data, $validator] = $this->validate($request);
+        [$data, $validator] = $this->form()->validate($request->form());
         if ($validator->fails()) {
             return $this->backWithErrors($request, $validator, '/prompts/' . $prompt['id'] . '/edit');
         }
@@ -182,24 +182,8 @@ final class PromptController extends Controller
         );
     }
 
-    /** @return array{0: array<string, mixed>, 1: Validator} */
-    private function validate(Request $request): array
+    private function form(): PromptForm
     {
-        $v = new Validator();
-        $rating = $v->int('rating', $request->input('rating'), 'Hodnocení', 1, 5, false);
-        $data = [
-            'kind' => $v->oneOf('kind', $request->input('kind'), Labels::group('prompt_kind'), 'Typ'),
-            'title' => $v->required('title', $request->input('title'), 'Název', 150),
-            'prompt' => $v->required('prompt', trim($request->rawInput('prompt')), 'Prompt', 20000),
-            'negative_prompt' => $v->optional('negative_prompt', trim($request->rawInput('negative_prompt')), 'Negativní prompt', 5000),
-            'seed' => $v->optional('seed', $request->input('seed'), 'Seed', 50),
-            'settings' => $v->optional('settings', trim($request->rawInput('settings')), 'Nastavení', 2000),
-            'tool_id' => $this->optionalId($request->input('tool_id'), 'ai_tools'),
-            'is_master' => $request->checkbox('is_master') ? 1 : 0,
-            'rating' => $rating,
-            'notes' => $v->optional('notes', trim($request->rawInput('notes')), 'Poznámky', 5000),
-        ];
-
-        return [$data, $v];
+        return new PromptForm($this->app->db);
     }
 }
