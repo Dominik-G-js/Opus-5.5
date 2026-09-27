@@ -37,9 +37,12 @@
         <td class="num small"><?= $row['currency'] === 'CZK' ? '—' : $v->e(number_format((float) $row['fx_rate'], 3, ',', '')) ?></td>
         <td class="num"><?= $v->money((int) $row['net_czk_minor'], 'CZK', true) ?></td>
         <td><span class="badge"><?= $v->label('tx_source', $row['source']) ?></span></td>
-        <td>
-          <?php if ($row['source'] !== 'fanvue'): ?>
-          <form method="post" action="<?= $v->url('/earnings/' . $row['id'] . '/delete') ?>" data-confirm="Smazat platbu?" class="inline"><?= $v->csrfField() ?><button type="submit" class="link-btn danger small">smazat</button></form>
+        <td class="row-actions">
+          <?php if (!empty($row['locked'])): ?>
+            <span class="small muted" title="Platbu přepisuje synchronizace s Fanvue. Upravit ji jde po odpojení účtu.">z API</span>
+          <?php else: ?>
+            <a class="small" href="<?= $v->url('/earnings/' . $row['id'] . '/edit') ?>">upravit</a>
+            <form method="post" action="<?= $v->url('/earnings/' . $row['id'] . '/delete') ?>" data-confirm="Smazat platbu?" class="inline"><?= $v->csrfField() ?><button type="submit" class="link-btn danger small">smazat</button></form>
           <?php endif; ?>
         </td>
       </tr>

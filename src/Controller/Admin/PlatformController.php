@@ -43,7 +43,11 @@ final class PlatformController extends Controller
     {
         $platform = $this->findOrFail('platforms', $request->intParam('id'));
 
-        return $this->render('platforms/form', ['title' => 'Upravit platformu', 'platform' => $platform]);
+        return $this->render('platforms/form', [
+            'title' => 'Upravit platformu',
+            'platform' => $platform,
+            'accountCount' => (int) $this->app->db->scalar('SELECT COUNT(*) FROM accounts WHERE platform_id = :p', ['p' => $platform['id']]),
+        ]);
     }
 
     public function update(Request $request): Response
@@ -55,6 +59,21 @@ final class PlatformController extends Controller
         }
         $this->app->db->update('platforms', $data, ['id' => $platform['id']]);
         $this->flash('success', 'Uloženo.');
+
+        return $this->redirect('/platforms');
+    }
+
+    public function delete(Request $request): Response
+    {
+        $platform = $this->findOrFail('platforms', $request->intParam('id'));
+        $accounts = (int) $this->app->db->scalar('SELECT COUNT(*) FROM accounts WHERE platform_id = :p', ['p' => $platform['id']]);
+        if ($accounts > 0) {
+            $this->flash('error', "Platformu používá {$accounts} účtů. Nejdřív je smaž nebo přesuň na jinou platformu (Upravit účet).");
+
+            return $this->redirect('/platforms/' . $platform['id'] . '/edit');
+        }
+        $this->app->db->delete('platforms', ['id' => $platform['id']]);
+        $this->flash('success', 'Platforma smazána.');
 
         return $this->redirect('/platforms');
     }

@@ -63,6 +63,10 @@ final class ImageController extends Controller
             $this->app->db->update('images', [
                 'is_reference' => $request->checkbox('is_reference') ? 1 : 0,
                 'alt_text' => Str::nullIfEmpty(mb_substr($request->input('alt_text'), 0, 300)),
+                'prompt_id' => $this->promptOfModel($request->input('prompt_id'), (int) $image['model_id']),
+                'tool_id' => $this->optionalId($request->input('tool_id'), 'ai_tools'),
+                'seed' => Str::nullIfEmpty(mb_substr($request->input('seed'), 0, 50)),
+                'notes' => Str::nullIfEmpty(mb_substr(trim($request->rawInput('notes')), 0, 2000)),
             ], ['id' => $image['id']]);
             $this->flash('success', 'Obrázek upraven.');
         } catch (RuntimeException $e) {

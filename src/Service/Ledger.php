@@ -17,6 +17,12 @@ use InvalidArgumentException;
  */
 final class Ledger
 {
+    /**
+     * SQL výraz (aliasy t = transactions, a = accounts): platba z Fanvue u připojeného účtu.
+     * Takovou platbu přepisuje každá synchronizace, proto ji nejde ručně upravit ani smazat.
+     */
+    public const SYNC_LOCKED_SQL = "(t.source = 'fanvue' AND a.integration = 'fanvue' AND a.credentials_enc IS NOT NULL)";
+
     public function __construct(
         private readonly Database $db,
         private readonly ExchangeRates $rates,

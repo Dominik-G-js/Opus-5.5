@@ -131,6 +131,18 @@ final class PromptController extends Controller
         return $this->redirect('/prompts/' . $prompt['id'] . '/edit');
     }
 
+    public function deleteVersion(Request $request): Response
+    {
+        $prompt = $this->findOrFail('prompts', $request->intParam('id'));
+        $deleted = $this->app->db->delete('prompt_versions', ['id' => $request->intParam('versionId'), 'prompt_id' => $prompt['id']]);
+        if ($deleted === 0) {
+            throw HttpException::notFound();
+        }
+        $this->flash('success', 'Verze smazána z historie.');
+
+        return $this->redirect('/prompts/' . $prompt['id'] . '/edit');
+    }
+
     public function delete(Request $request): Response
     {
         $prompt = $this->findOrFail('prompts', $request->intParam('id'));

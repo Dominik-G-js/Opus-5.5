@@ -31,7 +31,15 @@
 
 <div class="grid grid-2">
   <section class="card">
-    <h2>Změna hesla</h2>
+    <h2>Přihlašovací jméno</h2>
+    <form method="post" action="<?= $v->url('/settings/username') ?>" autocomplete="off">
+      <?= $v->csrfField() ?>
+      <div class="field"><label for="username">Jméno</label><input type="text" id="username" name="username" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9._\-]{3,50}" autocomplete="username" value="<?= $v->old('username', $user['username'] ?? '') ?>"><?= $v->error('username') ?></div>
+      <div class="field mt-1"><label for="username_password">Současné heslo</label><input type="password" id="username_password" name="current_password" required autocomplete="current-password"><?= $v->error('username_password') ?></div>
+      <p class="mt-1"><button type="submit" class="btn">Změnit jméno</button></p>
+    </form>
+
+    <h2 class="mt-1">Změna hesla</h2>
     <form method="post" action="<?= $v->url('/settings/password') ?>" autocomplete="off">
       <?= $v->csrfField() ?>
       <div class="field"><label for="current_password">Současné heslo</label><input type="password" id="current_password" name="current_password" required autocomplete="current-password"><?= $v->error('current_password') ?></div>

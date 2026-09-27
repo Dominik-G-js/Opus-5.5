@@ -60,7 +60,8 @@ def main():
         check(has_error(post("/models", {"name": "Jiná", "status": "concept", "persona_age": "25", "page_lang": "en", "page_domain": "zaneta-test.com"}), "Doménu už používá"), "modelka: duplicitní doména")
         r = post("/models", {"name": "Druhá Modelka", "status": "concept", "persona_age": "30", "page_lang": "en"})
         m2 = int(re.search(r"/models/(\d+)$", r.headers["Location"]).group(1))
-        get(f"/models/{m1}"); get(f"/models/{m1}/edit"); get(f"/models/{m1}/bible"); get("/models")
+        get(f"/models/{m1}"); get(f"/models/{m1}/edit"); get(f"/models/{m1}/bible")
+        check(f'/admin/models/{m1}/edit">upravit' in get("/models").text, "seznam modelek: odkaz upravit")
         r = post(f"/models/{m1}", {"name": "Žaneta Nováková", "slug": "zaneta-novakova", "status": "active", "persona_age": "28", "page_lang": "cs",
                                    "tagline": "Hory a fitness", "page_published": "1", "seo_title": "Žaneta — AI", "page_domain": "", "look_face": "oval face"})
         check(app.db("SELECT status, persona_age, page_published, page_domain FROM models WHERE id = ?", m1) == [("active", 28, 1, None)], "úprava modelky uložena")
@@ -76,6 +77,9 @@ def main():
         check(app.db("SELECT name, monthly_price_minor FROM ai_tools WHERE id = ?", tool[0]) == [("Midjourney v8", None)], "nástroj upraven")
         post(f"/models/{m1}/tools", {"tool_id": str(tool[0]), "purpose": "portréty"})
         check(app.db("SELECT purpose FROM model_tools WHERE model_id = ? AND tool_id = ?", m1, tool[0]) == [("portréty",)], "nástroj přiřazen modelce")
+        check('name="purpose" value="portréty"' in get(f"/models/{m1}").text, "účel nástroje jde upravit přímo na profilu")
+        post(f"/models/{m1}/tools", {"tool_id": str(tool[0]), "purpose": "trénink LoRA"})
+        check(app.db("SELECT purpose FROM model_tools WHERE model_id = ? AND tool_id = ?", m1, tool[0]) == [("trénink LoRA",)], "účel nástroje upraven")
         post(f"/models/{m1}/tools/{tool[0]}/detach", {})
         check(app.db("SELECT COUNT(*) FROM model_tools WHERE model_id = ?", m1)[0][0] == 0, "nástroj odebrán z modelky")
         post(f"/models/{m1}/tools", {"tool_id": str(tool[0])})
@@ -89,6 +93,9 @@ def main():
         pid = app.db("SELECT id FROM platforms WHERE name = 'Telegram'")[0][0]
         post(f"/platforms/{pid}", {"name": "Telegram", "role": "both", "ai_policy": "allowed", "default_fee_percent": "5,5", "default_currency": "EUR"})
         check(app.db("SELECT role, default_fee_percent, default_currency FROM platforms WHERE id = ?", pid) == [("both", 5.5, "EUR")], "platforma upravena")
+        check("Smazat platformu" in get(f"/platforms/{pid}/edit").text, "nepoužitá platforma má tlačítko Smazat")
+        post(f"/platforms/{pid}/delete", {})
+        check(app.db("SELECT COUNT(*) FROM platforms WHERE id = ?", pid)[0][0] == 0, "platforma smazána")
 
         # ---------------------------------------------------------------- 4) prompty
         r = get(f"/models/{m1}/prompts/new?kind=character_base")
@@ -102,6 +109,13 @@ def main():
         check(app.db("SELECT COUNT(*) FROM prompt_versions WHERE prompt_id = ?", pa)[0][0] == 1, "úprava promptu uloží starou verzi")
         post(f"/prompts/{pa}", {"kind": "image", "title": "A2", "prompt": "p1 upraveno", "seed": "5", "rating": "4"})
         check(app.db("SELECT COUNT(*) FROM prompt_versions WHERE prompt_id = ?", pa)[0][0] == 1, "změna jen názvu verzi neukládá")
+        ver = app.db("SELECT id FROM prompt_versions WHERE prompt_id = ?", pa)[0][0]
+        pb = app.db("SELECT id FROM prompts WHERE title = 'B'")[0][0]
+        check("smazat verzi" in get(f"/prompts/{pa}/edit").text, "historie promptu: tlačítko smazat verzi")
+        check(post(f"/prompts/{pb}/versions/{ver}/delete", {}).status_code == 404, "verzi cizího promptu nejde smazat")
+        post(f"/prompts/{pa}/versions/{ver}/delete", {})
+        check(app.db("SELECT COUNT(*) FROM prompt_versions WHERE id = ?", ver)[0][0] == 0, "verze promptu smazána")
+        post(f"/prompts/{pa}", {"kind": "image", "title": "A2", "prompt": "p1 znovu", "seed": "5", "rating": "4"})
         post(f"/prompts/{pa}/duplicate", {})
         check(app.db("SELECT COUNT(*) FROM prompts WHERE title = 'Kopie: A2' AND is_master = 0")[0][0] == 1, "duplikace promptu")
         post(f"/prompts/{pa}/delete", {})
@@ -113,6 +127,13 @@ def main():
         imgs = app.db("SELECT id, mime FROM images WHERE model_id = ? ORDER BY id", m1)
         check([m for _, m in imgs] == ["image/jpeg", "image/png", "image/webp"], "upload JPG, PNG, WebP")
         img = imgs[1][0]
+        post(f"/models/{m2}/prompts", {"kind": "image", "title": "Cizí", "prompt": "x"})
+        foreign = app.db("SELECT id FROM prompts WHERE model_id = ?", m2)[0][0]
+        tid = app.db("SELECT MIN(id) FROM ai_tools")[0][0]
+        post(f"/images/{imgs[0][0]}", {"alt_text": "a", "is_reference": "1", "prompt_id": str(pb), "tool_id": str(tid), "seed": "42", "notes": "Povedená"})
+        check(app.db("SELECT is_reference, prompt_id, tool_id, seed, notes FROM images WHERE id = ?", imgs[0][0]) == [(1, pb, tid, "42", "Povedená")], "obrázek: úprava promptu, nástroje, seedu a poznámky")
+        post(f"/images/{imgs[0][0]}", {"alt_text": "a", "prompt_id": str(foreign), "tool_id": "999999"})
+        check(app.db("SELECT is_reference, prompt_id, tool_id, seed, notes FROM images WHERE id = ?", imgs[0][0]) == [(0, None, None, None, None)], "obrázek: prompt jiné modelky a neexistující nástroj odmítnuty")
         post(f"/images/{img}", {"is_public": "1", "alt_text": "veřejný"})
         pub = app.db("SELECT public_id FROM images WHERE id = ?", img)[0][0]
         anon = session()
@@ -142,6 +163,9 @@ def main():
         check(has_error(post(f"/accounts/{acc2}/delete", {}), "Potvrď smazání"), "smazání účtu vyžaduje potvrzení")
         post(f"/accounts/{acc2}/delete", {"confirm": "1"})
         check(app.db("SELECT COUNT(*) FROM accounts WHERE id = ?", acc2)[0][0] == 0, "účet smazán")
+        check("Smazat platformu" not in get("/platforms/1/edit").text, "používaná platforma nemá tlačítko Smazat")
+        check(has_error(post("/platforms/1/delete", {}), "Platformu používá"), "platformu s účty nejde smazat")
+        check(app.db("SELECT COUNT(*) FROM platforms WHERE id = 1")[0][0] == 1, "platforma s účty zůstala")
         r = post(f"/accounts/{acc}/sync", {})
         check("není připojený" in follow(r).text, "synchronizace nepřipojeného účtu → srozumitelná chyba")
         r = post(f"/accounts/{acc}/fanvue/connect", {})
@@ -170,13 +194,60 @@ def main():
         rows = list(csv.reader(io.StringIO(exp.content.decode("utf-8-sig")), delimiter=";"))
         check(exp.headers["Content-Type"].startswith("text/csv") and len(rows) == 4 and rows[0][0] == "Datum", "export příjmů: hlavička + 3 řádky")
 
+        sub, pavel = app.db("SELECT id, fan_id FROM transactions WHERE type = 'subscription'")[0]
+        check(f'/admin/earnings/{sub}/edit">upravit' in get(f"/earnings?month={month}").text, "seznam příjmů: odkaz upravit")
+        form = get(f"/earnings/{sub}/edit").text
+        check('value="1000,00"' in form and 'value="850,00"' in form and 'value="Pavel"' in form and "Smazat příjem" in form, "formulář úpravy příjmu předvyplněný")
+        base = {"account_id": str(acc), "occurred_on": today, "occurred_time": "08:30", "type": "subscription", "gross": "1200", "net": "", "fan": "Pavel", "note": "upraveno"}
+        post(f"/earnings/{sub}", base)
+        check(app.db("SELECT gross_minor, net_minor, fan_id, note, source FROM transactions WHERE id = ?", sub) == [(120000, 102000, pavel, "upraveno", "manual")],
+              "úprava příjmu: nová částka, dopočet čisté, stejný fanoušek")
+        check(app.db("SELECT COUNT(*) FROM transactions")[0][0] == 3, "úprava nevytvoří novou platbu")
+        check(has_error(post(f"/earnings/{sub}", dict(base, gross="abc")), "Neplatná částka"), "úprava příjmu: validace")
+        check(app.db("SELECT gross_minor FROM transactions WHERE id = ?", sub)[0][0] == 120000, "neplatná úprava nic nezmění")
+        post(f"/earnings/{sub}", dict(base, fan="Nový Fan"))
+        new_fan = app.db("SELECT fan_id FROM transactions WHERE id = ?", sub)[0][0]
+        check(new_fan != pavel and app.db("SELECT display_name FROM fans WHERE id = ?", new_fan) == [("Nový Fan",)], "úprava příjmu: jiný fanoušek")
+        post(f"/earnings/{sub}", dict(base, fan=""))
+        check(app.db("SELECT fan_id FROM transactions WHERE id = ?", sub)[0][0] is None, "úprava příjmu: fanoušek odebrán")
+        post(f"/earnings/{sub}", base)
+        check(app.db("SELECT fan_id FROM transactions WHERE id = ?", sub)[0][0] == pavel, "úprava příjmu: zpět na původního fanouška")
+        get("/earnings/999999/edit", 404)
+
+        # Platba z Fanvue u připojeného účtu: synchronizace by ruční změnu přepsala → zamčeno; po odpojení jde upravit i smazat.
+        app.db("UPDATE accounts SET integration = 'fanvue', credentials_enc = 'x' WHERE id = ?", acc)
+        app.db("INSERT INTO transactions (account_id, occurred_at, occurred_on, type, gross_minor, net_minor, currency, fx_rate, gross_czk_minor, net_czk_minor, source, dedupe_key, created_at) "
+               "VALUES (?, ? || ' 10:00:00', ?, 'tip', 100, 80, 'CZK', 1, 100, 80, 'fanvue', 'fanvue:test', ? || ' 10:00:00')", acc, today, today, today)
+        fv = app.db("SELECT id FROM transactions WHERE source = 'fanvue'")[0][0]
+        page = get(f"/earnings?month={month}").text
+        check("z API" in page and f"/earnings/{fv}/edit" not in page, "platba z Fanvue: bez odkazu upravit")
+        check("synchronizace by změnu přepsala" in follow(s.get(A + f"/earnings/{fv}/edit", allow_redirects=False)).text, "platba z Fanvue: úprava zamčená")
+        post(f"/earnings/{fv}", dict(base, gross="1"))
+        post(f"/earnings/{fv}/delete", {})
+        check(app.db("SELECT gross_minor FROM transactions WHERE id = ?", fv) == [(100,)], "platba z Fanvue: POST úprava i mazání odmítnuty")
+        app.db("UPDATE accounts SET integration = 'none', credentials_enc = NULL WHERE id = ?", acc)
+        get(f"/earnings/{fv}/edit")
+        post(f"/earnings/{fv}/delete", {})
+        check(app.db("SELECT COUNT(*) FROM transactions WHERE id = ?", fv)[0][0] == 0, "po odpojení Fanvue jde platbu smazat")
+
         # ---------------------------------------------------------------- 8) fanoušci
         fans = get("/fans").text
         check(fans.index("Pavel") < fans.index("Eva"), "fanoušci podle útraty (Pavel 935 Kč > Eva 150 Kč)")
         fan = app.db("SELECT id FROM fans WHERE handle = 'Pavel'")[0][0]
         get(f"/fans/{fan}")
-        post(f"/fans/{fan}", {"notes": "Má rád hory"})
+        post(f"/fans/{fan}", {"display_name": "Pavel", "handle": "Pavel", "notes": "Má rád hory"})
         check(app.db("SELECT notes FROM fans WHERE id = ?", fan) == [("Má rád hory",)], "poznámka k fanouškovi")
+        post(f"/fans/{fan}", {"display_name": "Pavel K.", "handle": "@pavelk", "is_top_spender": "1", "notes": "Má rád hory"})
+        check(app.db("SELECT display_name, handle, is_top_spender, external_id FROM fans WHERE id = ?", fan) == [("Pavel K.", "pavelk", 1, "manual:pavel k.")],
+              "fanoušek přejmenován, klíč pro párování plateb aktualizován")
+        post("/earnings", {"account_id": str(acc), "occurred_on": today, "type": "tip", "gross": "10", "fan": "Pavel K."})
+        check(app.db("SELECT fan_id FROM transactions ORDER BY id DESC LIMIT 1")[0][0] == fan, "nová platba se jménem po přejmenování patří stejnému fanouškovi")
+        check(has_error(post(f"/fans/{fan}", {"display_name": "Eva", "handle": ""}), "už u účtu existuje"), "fanoušek: duplicitní jméno odmítnuto")
+        check(has_error(post(f"/fans/{fan}", {"display_name": "", "handle": ""}), "Vyplň jméno"), "fanoušek: bez jména odmítnut")
+        eva = app.db("SELECT id FROM fans WHERE display_name = 'Eva'")[0][0]
+        post(f"/fans/{eva}/delete", {})
+        check(app.db("SELECT COUNT(*) FROM fans WHERE id = ?", eva)[0][0] == 0 and app.db("SELECT fan_id FROM transactions WHERE type = 'message'") == [(None,)],
+              "fanoušek smazán, jeho platby zůstaly")
         get(f"/fans?month={month}&model={m1}")
 
         # ---------------------------------------------------------------- 9) náklady
@@ -228,6 +299,13 @@ def main():
         check(has_error(post("/settings/password", {"current_password": "spatne", "password": "Nove-Heslo-1234", "password_confirm": "Nove-Heslo-1234"}), "Současné heslo nesouhlasí"), "heslo: špatné současné")
         check(has_error(post("/settings/password", {"current_password": "E2E-Test-Heslo-2026!", "password": "kratke", "password_confirm": "kratke"}), "alespoň 12"), "heslo: příliš krátké")
         check(has_error(post("/settings/password", {"current_password": "E2E-Test-Heslo-2026!", "password": "Nove-Heslo-1234", "password_confirm": "Jine-Heslo-1234"}), "neshodují"), "heslo: neshoda")
+        check(has_error(post("/settings/username", {"username": "novy", "current_password": "spatne"}), "Současné heslo nesouhlasí"), "jméno: špatné heslo")
+        check(has_error(post("/settings/username", {"username": "a b", "current_password": "E2E-Test-Heslo-2026!"}), "3–50 znaků"), "jméno: neplatné znaky")
+        post("/settings/username", {"username": "majitel", "current_password": "E2E-Test-Heslo-2026!"})
+        check(app.db("SELECT username FROM users") == [("majitel",)], "přihlašovací jméno změněno")
+        login(app, user="majitel")
+        check("majitel" in get("/settings").text, "přihlášení novým jménem, stávající relace platí")
+        post("/settings/username", {"username": "tester", "current_password": "E2E-Test-Heslo-2026!"})
         post("/settings/2fa/start", {})
         check(has_error(post("/settings/2fa/enable", {"code": "123456"}), "Kód nesouhlasí"), "2FA: špatný kód")
         check(app.db("SELECT totp_enabled FROM users")[0][0] == 0, "2FA zůstalo vypnuté")

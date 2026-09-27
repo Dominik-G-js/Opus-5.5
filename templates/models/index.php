@@ -12,7 +12,7 @@
 <?php else: ?>
 <div class="card table-wrap">
   <table>
-    <thead><tr><th></th><th>Jméno</th><th>Nika</th><th>Stav</th><th class="num">Prompty</th><th class="num">Obrázky</th><th class="num">Účty</th><th>Stránka</th></tr></thead>
+    <thead><tr><th></th><th>Jméno</th><th>Nika</th><th>Stav</th><th class="num">Prompty</th><th class="num">Obrázky</th><th class="num">Účty</th><th>Stránka</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($models as $model): ?>
       <tr>
@@ -24,6 +24,7 @@
         <td class="num"><?= (int) $model['image_count'] ?></td>
         <td class="num"><?= (int) $model['account_count'] ?></td>
         <td><?= (int) $model['page_published'] === 1 ? '<span class="badge badge-good">zveřejněná</span>' : '<span class="badge">skrytá</span>' ?></td>
+        <td class="num"><a class="small" href="<?= $v->url('/models/' . $model['id'] . '/edit') ?>">upravit</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

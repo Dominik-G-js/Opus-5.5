@@ -56,6 +56,26 @@ final class SettingsController extends Controller
         return $this->redirect('/settings');
     }
 
+    public function changeUsername(Request $request): Response
+    {
+        $user = $this->app->auth->user();
+        if ($user === null || !Passwords::verify($request->rawInput('current_password'), (string) $user['password_hash'])) {
+            return $this->backWithErrors($request, ['username_password' => 'Současné heslo nesouhlasí.'], '/settings');
+        }
+        $username = $request->input('username');
+        if (preg_match('/^[a-zA-Z0-9._-]{3,50}$/', $username) !== 1) {
+            return $this->backWithErrors($request, ['username' => 'Přihlašovací jméno: 3–50 znaků, jen písmena bez diakritiky, číslice, tečka, pomlčka a podtržítko.'], '/settings');
+        }
+        if ($this->app->db->scalar('SELECT 1 FROM users WHERE username = :u AND id != :id', ['u' => $username, 'id' => $user['id']]) !== null) {
+            return $this->backWithErrors($request, ['username' => 'Toto jméno už má jiný uživatel.'], '/settings');
+        }
+        $this->app->db->update('users', ['username' => $username], ['id' => $user['id']]);
+        $this->app->logger->info('auth.username_changed', ['from' => $user['username'], 'to' => $username]);
+        $this->flash('success', 'Přihlašovací jméno změněno. Příště se přihlas jako ' . $username . '.');
+
+        return $this->redirect('/settings');
+    }
+
     public function changePassword(Request $request): Response
     {
         $user = $this->app->auth->user();

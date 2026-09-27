@@ -106,9 +106,14 @@ if ($prompt === null && $defaultKind === 'character_base') {
         <summary><?= $v->dateTime($version['created_at']) ?><?= $version['seed'] ? ' · seed ' . $v->e($version['seed']) : '' ?></summary>
         <pre><?= $v->e($version['prompt']) ?></pre>
         <?php if ($version['negative_prompt']): ?><p class="small"><strong>Negativní:</strong> <?= $v->e($version['negative_prompt']) ?></p><?php endif; ?>
-        <form method="post" action="<?= $v->url('/prompts/' . $prompt['id'] . '/restore/' . $version['id']) ?>" data-confirm="Obnovit tuto verzi?">
-          <?= $v->csrfField() ?><button type="submit" class="btn btn-sm">Obnovit tuto verzi</button>
-        </form>
+        <div class="actions">
+          <form method="post" action="<?= $v->url('/prompts/' . $prompt['id'] . '/restore/' . $version['id']) ?>" data-confirm="Obnovit tuto verzi?" class="inline">
+            <?= $v->csrfField() ?><button type="submit" class="btn btn-sm">Obnovit tuto verzi</button>
+          </form>
+          <form method="post" action="<?= $v->url('/prompts/' . $prompt['id'] . '/versions/' . $version['id'] . '/delete') ?>" data-confirm="Smazat tuto verzi z historie?" class="inline">
+            <?= $v->csrfField() ?><button type="submit" class="link-btn danger small">smazat verzi</button>
+          </form>
+        </div>
       </details>
     <?php endforeach; ?>
   <?php else: ?>

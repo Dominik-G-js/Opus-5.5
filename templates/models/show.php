@@ -57,7 +57,14 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
       <table><tbody>
       <?php foreach ($tools as $tool): ?>
         <tr>
-          <td><strong><?= $v->e($tool['name']) ?></strong> <span class="badge"><?= $v->label('tool_category', $tool['category']) ?></span><br><span class="muted small"><?= $v->e($tool['purpose'] ?? '') ?></span></td>
+          <td>
+            <strong><?= $v->e($tool['name']) ?></strong> <span class="badge"><?= $v->label('tool_category', $tool['category']) ?></span>
+            <form method="post" action="<?= $v->url('/models/' . $id . '/tools') ?>" class="purpose-edit">
+              <?= $v->csrfField() ?><input type="hidden" name="tool_id" value="<?= (int) $tool['id'] ?>">
+              <input type="text" name="purpose" value="<?= $v->e($tool['purpose'] ?? '') ?>" maxlength="255" placeholder="k čemu" aria-label="K čemu slouží <?= $v->e($tool['name']) ?>">
+              <button type="submit" class="link-btn small">uložit</button>
+            </form>
+          </td>
           <td class="num">
             <form method="post" action="<?= $v->url('/models/' . $id . '/tools/' . $tool['id'] . '/detach') ?>" class="inline">
               <?= $v->csrfField() ?><button type="submit" class="link-btn danger small">odebrat</button>
@@ -89,7 +96,7 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
   <?php endif; ?>
   <?php if ($prompts !== []): ?>
   <div class="table-wrap"><table>
-    <thead><tr><th>Název</th><th>Typ</th><th>Nástroj</th><th>Hodnocení</th><th>Upraveno</th></tr></thead>
+    <thead><tr><th>Název</th><th>Typ</th><th>Nástroj</th><th>Hodnocení</th><th>Upraveno</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($prompts as $prompt): ?>
       <tr>
@@ -98,6 +105,7 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
         <td><?= $v->e($prompt['tool_name'] ?? '—') ?></td>
         <td><?= $prompt['rating'] !== null ? str_repeat('★', (int) $prompt['rating']) : '—' ?></td>
         <td class="small muted"><?= $v->dateTime($prompt['updated_at']) ?></td>
+        <td class="num"><a class="small" href="<?= $v->url('/prompts/' . $prompt['id'] . '/edit') ?>">upravit</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
@@ -132,6 +140,17 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
             <input type="text" name="alt_text" value="<?= $v->e($image['alt_text'] ?? '') ?>" placeholder="popis (alt)" maxlength="300" aria-label="Popis obrázku">
             <label class="check"><input type="checkbox" name="is_reference" value="1"<?= $v->checked((int) $image['is_reference'] === 1) ?>> reference</label>
             <label class="check"><input type="checkbox" name="is_public" value="1"<?= $v->checked((int) $image['is_public'] === 1) ?>> zveřejnit (SFW)</label>
+            <details class="tile-more">
+              <summary>Prompt, nástroj, seed, poznámka</summary>
+              <label class="small" for="img-<?= (int) $image['id'] ?>-prompt">Prompt</label>
+              <select id="img-<?= (int) $image['id'] ?>-prompt" name="prompt_id"><?= $v->options($promptOptions, $image['prompt_id'] ?? '', true) ?></select>
+              <label class="small" for="img-<?= (int) $image['id'] ?>-tool">Nástroj</label>
+              <select id="img-<?= (int) $image['id'] ?>-tool" name="tool_id"><?= $v->options($toolOptions, $image['tool_id'] ?? '', true) ?></select>
+              <label class="small" for="img-<?= (int) $image['id'] ?>-seed">Seed</label>
+              <input type="text" id="img-<?= (int) $image['id'] ?>-seed" name="seed" maxlength="50" value="<?= $v->e($image['seed'] ?? '') ?>">
+              <label class="small" for="img-<?= (int) $image['id'] ?>-notes">Poznámka</label>
+              <textarea id="img-<?= (int) $image['id'] ?>-notes" name="notes" rows="2" maxlength="2000"><?= $v->e($image['notes'] ?? '') ?></textarea>
+            </details>
             <button type="submit" class="btn btn-sm">Uložit</button>
           </form>
           <form method="post" action="<?= $v->url('/images/' . $image['id'] . '/delete') ?>" data-confirm="Smazat obrázek?">
@@ -159,6 +178,7 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
             <br><span class="small muted"><?= $v->label('platform_role', $account['role']) ?> · <?= $v->label('account_status', $account['status']) ?></span>
           </td>
           <td class="num small"><?= $account['integration'] === 'fanvue' ? '<span class="badge badge-good">API</span>' : '<span class="badge">ručně</span>' ?></td>
+          <td class="num"><a class="small" href="<?= $v->url('/accounts/' . $account['id'] . '/edit') ?>">upravit</a></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table>
@@ -172,7 +192,7 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
     <?php else: ?>
     <table><tbody>
       <?php foreach ($links as $link): ?>
-        <tr><td><a href="<?= $v->url('/links/' . $link['id'] . '/edit') ?>"><?= $v->e($link['label']) ?></a> <span class="muted small"><?= $v->label('link_source', $link['source']) ?></span></td><td class="num"><?= (int) $link['clicks'] ?> prokliků</td></tr>
+        <tr><td><?= $v->e($link['label']) ?> <span class="muted small"><?= $v->label('link_source', $link['source']) ?></span></td><td class="num"><?= (int) $link['clicks'] ?> prokliků</td><td class="num"><a class="small" href="<?= $v->url('/links/' . $link['id'] . '/edit') ?>">upravit</a></td></tr>
       <?php endforeach; ?>
     </tbody></table>
     <?php endif; ?>
@@ -190,6 +210,7 @@ $masterPrompts = array_filter($prompts, static fn (array $p): bool => (int) $p['
         <tr>
           <td><?= $v->date($cost['incurred_on']) ?><br><span class="small muted"><?= $v->label('cost_category', $cost['category']) ?><?= $cost['tool_name'] ? ' · ' . $v->e($cost['tool_name']) : '' ?><?= $cost['quantity'] ? ' · ' . (int) $cost['quantity'] . ' ks' : '' ?></span></td>
           <td class="num"><?= $v->money((int) $cost['amount_czk_minor'], 'CZK', true) ?><?php if ($cost['currency'] !== 'CZK'): ?><br><span class="small muted"><?= $v->money((int) $cost['amount_minor'], $cost['currency'], true) ?></span><?php endif; ?></td>
+          <td class="num"><a class="small" href="<?= $v->url('/costs/' . $cost['id'] . '/edit') ?>">upravit</a></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table>

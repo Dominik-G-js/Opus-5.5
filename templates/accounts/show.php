@@ -83,6 +83,7 @@ $connected = $account['integration'] === 'fanvue' && !empty($account['credential
         <tr>
           <td class="small"><?= $v->dateTime($tx['occurred_at']) ?><br><span class="muted"><?= $v->label('tx_type', $tx['type']) ?><?= $tx['fan_name'] || $tx['fan_handle'] ? ' · ' . $v->e($tx['fan_name'] ?? $tx['fan_handle']) : '' ?></span></td>
           <td class="num"><?= $v->money((int) $tx['net_minor'], $tx['currency'], true) ?><br><span class="small muted"><?= $v->money((int) $tx['net_czk_minor']) ?></span></td>
+          <td class="num"><?php if (empty($tx['locked'])): ?><a class="small" href="<?= $v->url('/earnings/' . $tx['id'] . '/edit') ?>">upravit</a><?php endif; ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>

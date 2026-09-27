@@ -7,6 +7,7 @@ namespace App\Controller\Admin;
 use App\Controller\Controller;
 use App\Kernel\Request;
 use App\Kernel\Response;
+use App\Service\Ledger;
 use App\Service\Stats;
 use App\Support\Clock;
 use App\Support\Labels;
@@ -59,7 +60,8 @@ final class AccountController extends Controller
             ),
             'lifetimeNet' => (int) $this->app->db->scalar('SELECT COALESCE(SUM(net_czk_minor), 0) FROM transactions WHERE account_id = :a', ['a' => $id]),
             'transactions' => $this->app->db->all(
-                'SELECT t.*, f.handle AS fan_handle, f.display_name AS fan_name FROM transactions t
+                'SELECT t.*, f.handle AS fan_handle, f.display_name AS fan_name, ' . Ledger::SYNC_LOCKED_SQL . ' AS locked
+                 FROM transactions t JOIN accounts a ON a.id = t.account_id
                  LEFT JOIN fans f ON f.id = t.fan_id WHERE t.account_id = :a ORDER BY t.occurred_at DESC LIMIT 50',
                 ['a' => $id]
             ),

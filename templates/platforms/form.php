@@ -19,4 +19,11 @@ $val = static fn (string $key, mixed $default = '') => $v->old($key, $p[$key] ??
   </div>
   <p><button type="submit" class="btn btn-primary">Uložit</button></p>
 </form>
+<?php if ($platform !== null): ?>
+  <?php if (($accountCount ?? 0) > 0): ?>
+    <p class="hint">Smazat ji jde, až ji nebude používat žádný účet (teď <?= (int) $accountCount ?>).</p>
+  <?php else: ?>
+    <form method="post" action="<?= $v->url('/platforms/' . $platform['id'] . '/delete') ?>" data-confirm="Smazat platformu?"><?= $v->csrfField() ?><button type="submit" class="link-btn danger">Smazat platformu</button></form>
+  <?php endif; ?>
+<?php endif; ?>
 </section>

@@ -182,7 +182,7 @@ final class ModelController extends Controller
              ON CONFLICT (model_id, tool_id) DO UPDATE SET purpose = excluded.purpose',
             ['m' => $model['id'], 't' => $toolId, 'p' => Str::nullIfEmpty(mb_substr($request->input('purpose'), 0, 255))]
         );
-        $this->flash('success', 'Nástroj přiřazen.');
+        $this->flash('success', 'Nástroj u modelky uložen.');
 
         return $this->redirect('/models/' . $model['id']);
     }

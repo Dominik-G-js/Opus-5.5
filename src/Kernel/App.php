@@ -169,6 +169,7 @@ final class App
         $r->post($p . '/prompts/{id}/delete', fn (Request $q) => $prompts()->delete($q));
         $r->post($p . '/prompts/{id}/duplicate', fn (Request $q) => $prompts()->duplicate($q));
         $r->post($p . '/prompts/{id}/restore/{versionId}', fn (Request $q) => $prompts()->restore($q));
+        $r->post($p . '/prompts/{id}/versions/{versionId}/delete', fn (Request $q) => $prompts()->deleteVersion($q));
 
         $images = fn () => new Admin\ImageController($this);
         $r->post($p . '/models/{id}/images', fn (Request $q) => $images()->upload($q));
@@ -199,6 +200,7 @@ final class App
         $r->post($p . '/platforms', fn (Request $q) => $platforms()->store($q));
         $r->get($p . '/platforms/{id}/edit', fn (Request $q) => $platforms()->edit($q));
         $r->post($p . '/platforms/{id}', fn (Request $q) => $platforms()->update($q));
+        $r->post($p . '/platforms/{id}/delete', fn (Request $q) => $platforms()->delete($q));
 
         $accounts = fn () => new Admin\AccountController($this);
         $r->get($p . '/models/{id}/accounts/new', fn (Request $q) => $accounts()->create($q));
@@ -212,12 +214,15 @@ final class App
         $r->get($p . '/fans', fn (Request $q) => $fans()->index($q));
         $r->get($p . '/fans/{id}', fn (Request $q) => $fans()->show($q));
         $r->post($p . '/fans/{id}', fn (Request $q) => $fans()->update($q));
+        $r->post($p . '/fans/{id}/delete', fn (Request $q) => $fans()->delete($q));
 
         $tx = fn () => new Admin\TransactionController($this);
         $r->get($p . '/earnings', fn (Request $q) => $tx()->index($q));
         $r->get($p . '/earnings/new', fn (Request $q) => $tx()->create($q));
         $r->get($p . '/earnings/export', fn (Request $q) => $tx()->export($q));
         $r->post($p . '/earnings', fn (Request $q) => $tx()->store($q));
+        $r->get($p . '/earnings/{id}/edit', fn (Request $q) => $tx()->edit($q));
+        $r->post($p . '/earnings/{id}', fn (Request $q) => $tx()->update($q));
         $r->post($p . '/earnings/{id}/delete', fn (Request $q) => $tx()->delete($q));
         $r->get($p . '/earnings/import', fn (Request $q) => $tx()->importForm($q));
         $r->post($p . '/earnings/import', fn (Request $q) => $tx()->importUpload($q));
@@ -240,6 +245,7 @@ final class App
         $settings = fn () => new Admin\SettingsController($this);
         $r->get($p . '/settings', fn (Request $q) => $settings()->index($q));
         $r->post($p . '/settings/goal', fn (Request $q) => $settings()->updateGoal($q));
+        $r->post($p . '/settings/username', fn (Request $q) => $settings()->changeUsername($q));
         $r->post($p . '/settings/password', fn (Request $q) => $settings()->changePassword($q));
         $r->post($p . '/settings/2fa/start', fn (Request $q) => $settings()->startTwoFactor($q));
         $r->post($p . '/settings/2fa/enable', fn (Request $q) => $settings()->enableTwoFactor($q));

@@ -9,6 +9,7 @@ use App\Kernel\Request;
 use App\Kernel\Response;
 use App\Service\CsvImporter;
 use App\Service\ExchangeRateUnavailable;
+use App\Service\Ledger;
 use App\Service\Stats;
 use App\Support\Clock;
 use App\Support\CsvExport;
@@ -51,7 +52,8 @@ final class TransactionController extends Controller
         $whereSql = implode(' AND ', $where);
 
         $rows = $this->app->db->all(
-            "SELECT t.*, a.handle AS account, p.name AS platform, m.name AS model, f.handle AS fan_handle, f.display_name AS fan_name
+            "SELECT t.*, a.handle AS account, p.name AS platform, m.name AS model, f.handle AS fan_handle, f.display_name AS fan_name,
+                " . Ledger::SYNC_LOCKED_SQL . " AS locked
              FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN platforms p ON p.id = a.platform_id
              JOIN models m ON m.id = a.model_id LEFT JOIN fans f ON f.id = t.fan_id
              WHERE {$whereSql} ORDER BY t.occurred_at DESC LIMIT 1000",
@@ -117,6 +119,7 @@ final class TransactionController extends Controller
     {
         return $this->render('earnings/form', [
             'title' => 'Přidat příjem',
+            'tx' => null,
             'accountOptions' => $this->accountOptions(),
             'presetAccount' => $this->optionalId($request->query('account'), 'accounts'),
         ]);
@@ -124,6 +127,117 @@ final class TransactionController extends Controller
 
     public function store(Request $request): Response
     {
+        $prepared = $this->prepareFromRequest($request, null);
+        if ($prepared instanceof Response) {
+            return $prepared;
+        }
+        [$row, $fanName, $account] = $prepared;
+        $ledger = $this->ledger();
+        $this->app->db->transaction(function () use ($ledger, $row, $fanName, $account): void {
+            if ($fanName !== '') {
+                $row['fan_id'] = $ledger->upsertFan((int) $account['id'], 'manual:' . mb_strtolower($fanName), $fanName, $fanName);
+            }
+            $ledger->insertTransaction($row);
+        });
+        $this->flash('success', 'Příjem uložen: ' . Money::format($row['net_czk_minor'], 'CZK') . ' po poplatku.');
+
+        return $this->redirect('/earnings', ['month' => substr((string) $row['occurred_on'], 0, 7)]);
+    }
+
+    public function edit(Request $request): Response
+    {
+        $tx = $this->findOrFail('transactions', $request->intParam('id'));
+        if ($this->isLockedBySync($tx)) {
+            return $this->lockedResponse($tx);
+        }
+        $fan = $tx['fan_id'] !== null ? $this->app->db->one('SELECT * FROM fans WHERE id = :id', ['id' => $tx['fan_id']]) : null;
+
+        return $this->render('earnings/form', [
+            'title' => 'Upravit příjem',
+            'tx' => $tx,
+            'fanName' => $fan !== null ? (string) ($fan['display_name'] ?? $fan['handle'] ?? '') : '',
+            'accountOptions' => $this->accountOptions(),
+            'presetAccount' => (int) $tx['account_id'],
+        ]);
+    }
+
+    public function update(Request $request): Response
+    {
+        $tx = $this->findOrFail('transactions', $request->intParam('id'));
+        if ($this->isLockedBySync($tx)) {
+            return $this->lockedResponse($tx);
+        }
+        $prepared = $this->prepareFromRequest($request, $tx);
+        if ($prepared instanceof Response) {
+            return $prepared;
+        }
+        [$row, $fanName, $account] = $prepared;
+        // Zdroj, dedupe klíč (brání opětovnému importu stejného řádku CSV) a datum vytvoření zůstávají.
+        unset($row['source'], $row['dedupe_key'], $row['created_at']);
+
+        $currentFan = $tx['fan_id'] !== null ? $this->app->db->one('SELECT * FROM fans WHERE id = :id', ['id' => $tx['fan_id']]) : null;
+        $currentName = $currentFan !== null ? (string) ($currentFan['display_name'] ?? $currentFan['handle'] ?? '') : '';
+        $keepFan = $currentFan !== null && $fanName === $currentName && (int) $currentFan['account_id'] === (int) $account['id'];
+
+        $ledger = $this->ledger();
+        $this->app->db->transaction(function () use ($ledger, $row, $fanName, $account, $tx, $keepFan): void {
+            if ($keepFan) {
+                $row['fan_id'] = $tx['fan_id'];
+            } elseif ($fanName !== '') {
+                $row['fan_id'] = $ledger->upsertFan((int) $account['id'], 'manual:' . mb_strtolower($fanName), $fanName, $fanName);
+            } else {
+                $row['fan_id'] = null;
+            }
+            $this->app->db->update('transactions', $row, ['id' => $tx['id']]);
+        });
+        $this->flash('success', 'Příjem upraven: ' . Money::format($row['net_czk_minor'], 'CZK') . ' po poplatku.');
+
+        return $this->redirect('/earnings', ['month' => substr((string) $row['occurred_on'], 0, 7)]);
+    }
+
+    public function delete(Request $request): Response
+    {
+        $tx = $this->findOrFail('transactions', $request->intParam('id'));
+        if ($this->isLockedBySync($tx)) {
+            return $this->lockedResponse($tx);
+        }
+        $this->app->db->delete('transactions', ['id' => $tx['id']]);
+        $this->flash('success', 'Příjem smazán.');
+
+        return $this->redirect('/earnings', ['month' => substr((string) $tx['occurred_on'], 0, 7)]);
+    }
+
+    /**
+     * Platby z Fanvue u připojeného účtu přepisuje každá synchronizace — ruční změna by se ztratila.
+     * Po odpojení účtu jsou to běžná data a jdou upravit i smazat.
+     *
+     * @param array<string, mixed> $tx
+     */
+    private function isLockedBySync(array $tx): bool
+    {
+        return $this->app->db->scalar(
+            'SELECT ' . Ledger::SYNC_LOCKED_SQL . ' FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.id = :id',
+            ['id' => $tx['id']]
+        ) == 1;
+    }
+
+    /** @param array<string, mixed> $tx */
+    private function lockedResponse(array $tx): Response
+    {
+        $this->flash('error', 'Platbu stáhlo Fanvue API a další synchronizace by změnu přepsala. Upravit nebo smazat ji jde po odpojení Fanvue u účtu.');
+
+        return $this->redirect('/earnings', ['month' => substr((string) $tx['occurred_on'], 0, 7)]);
+    }
+
+    /**
+     * Validace formuláře příjmu a výpočet řádku (kurz ČNB, dopočet hrubé/čisté částky).
+     *
+     * @param array<string, mixed>|null $tx upravovaná transakce, null = nová
+     * @return Response|array{0: array<string, mixed>, 1: string, 2: array<string, mixed>}
+     */
+    private function prepareFromRequest(Request $request, ?array $tx): Response|array
+    {
+        $formPath = $tx === null ? '/earnings/new' : '/earnings/' . $tx['id'] . '/edit';
         $v = new Validator();
         $accountId = $this->optionalId($request->input('account_id'), 'accounts');
         if ($accountId === null) {
@@ -145,10 +259,10 @@ final class TransactionController extends Controller
         $currency = $currencyInput === '' ? (string) ($account['currency'] ?? 'USD') : $v->currency('currency', $currencyInput, 'Měna');
         $fxInput = $request->input('fx_rate');
         $fx = $fxInput === '' ? null : $v->decimal('fx_rate', $fxInput, 'Kurz', 0.0001, 10000);
-        $fanName = mb_substr($request->input('fan'), 0, 150);
+        $fanName = trim(mb_substr($request->input('fan'), 0, 150));
         $note = $v->optional('note', $request->input('note'), 'Poznámka', 500);
         if ($v->fails() || $account === null) {
-            return $this->backWithErrors($request, $v, '/earnings/new');
+            return $this->backWithErrors($request, $v, $formPath);
         }
 
         [$gross, $net] = Money::completeGrossNet($gross, $net, (float) $account['fee_percent']);
@@ -159,39 +273,17 @@ final class TransactionController extends Controller
                 'gross_minor' => $gross,
                 'net_minor' => $net,
                 'currency' => $currency,
-                'source' => 'manual',
+                'source' => $tx['source'] ?? 'manual',
                 'note' => $note,
                 'fx_rate' => $fx,
             ]);
         } catch (ExchangeRateUnavailable $e) {
             $v->addError('fx_rate', $e->getMessage());
 
-            return $this->backWithErrors($request, $v, '/earnings/new');
+            return $this->backWithErrors($request, $v, $formPath);
         }
-        $ledger = $this->ledger();
-        $this->app->db->transaction(function () use ($ledger, $row, $fanName, $account): void {
-            if ($fanName !== '') {
-                $row['fan_id'] = $ledger->upsertFan((int) $account['id'], 'manual:' . mb_strtolower($fanName), $fanName, $fanName);
-            }
-            $ledger->insertTransaction($row);
-        });
-        $this->flash('success', 'Příjem uložen: ' . Money::format($row['net_czk_minor'], 'CZK') . ' po poplatku.');
 
-        return $this->redirect('/earnings', ['month' => substr($date, 0, 7)]);
-    }
-
-    public function delete(Request $request): Response
-    {
-        $tx = $this->findOrFail('transactions', $request->intParam('id'));
-        if ($tx['source'] === 'fanvue') {
-            $this->flash('error', 'Transakce z Fanvue API se při další synchronizaci vrátí — smazání nemá smysl.');
-
-            return $this->redirect('/earnings', ['month' => substr((string) $tx['occurred_on'], 0, 7)]);
-        }
-        $this->app->db->delete('transactions', ['id' => $tx['id']]);
-        $this->flash('success', 'Transakce smazána.');
-
-        return $this->redirect('/earnings', ['month' => substr((string) $tx['occurred_on'], 0, 7)]);
+        return [$row, $fanName, $account];
     }
 
     public function importForm(Request $request): Response
