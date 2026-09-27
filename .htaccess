@@ -1,0 +1,15 @@
+# Pro hosting, kde nejde nastavit document root na složku public/:
+# všechny požadavky se interně přesměrují do public/, zbytek projektu (config, storage, src…) je nedostupný.
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(\.git|config|storage|src|templates|migrations|bin|tests|docs|vendor)(/|$) - [F,L]
+    RewriteRule ^(autoload\.php|README\.md|composer\.(json|lock))$ - [F,L]
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

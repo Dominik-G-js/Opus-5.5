@@ -1,0 +1,6 @@
+/config/config.php
+/storage/*
+!/storage/.htaccess
+!/storage/.gitkeep
+/.phpunit.cache
+.DS_Store

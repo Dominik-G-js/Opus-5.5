@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Cli\Console;
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+require dirname(__DIR__) . '/autoload.php';
+
+exit((new Console(dirname(__DIR__)))->run(array_slice($argv, 1)));
