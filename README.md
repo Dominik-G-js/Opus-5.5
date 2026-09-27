@@ -9,6 +9,30 @@ Strategie, rešerše a plán jsou v `docs/`:
 3. [Modelky, nástroje a prompty](docs/03-modelky-koncepty-a-prompty.md) — konzistentní tvář (LoRA), ceny nástrojů, šablony promptů, 5 konceptů
 4. [Plán na 10 000 Kč měsíčně](docs/04-plan-10000-kc.md) — počty, 90denní plán, kontrolní body
 
+## Jak si aplikaci proklikat (lokálně, 5 minut)
+
+Potřebuješ jen PHP 8.2 nebo novější — žádnou databázi ani webserver.
+
+1. **PHP**
+   - Windows: [Laragon](https://laragon.org) nebo [XAMPP](https://www.apachefriends.org) (obsahují PHP), případně zip z [windows.php.net](https://windows.php.net/download/). V `php.ini` musí být zapnuté: `extension=curl`, `fileinfo`, `gd`, `intl`, `mbstring`, `pdo_sqlite`, `sodium`.
+   - macOS: `brew install php`
+   - Ověření: `php -v`
+2. **Stáhni projekt** — `git clone https://github.com/Dominik-G-js/Opus-5.5.git` (nebo na GitHubu *Code → Download ZIP*).
+3. **Ve složce projektu spusť:**
+   ```bash
+   php bin/console install --base-url=http://127.0.0.1:8000 --admin-path=/admin
+   php bin/console demo
+   php -S 127.0.0.1:8000 -t public bin/dev-router.php
+   ```
+   `install` se zeptá na jméno a heslo (min. 12 znaků), `demo` naplní ukázková data (modelka s 5 měsíci příjmů, fanoušci, náklady, prompty, odkazy).
+4. **Otevři v prohlížeči:**
+   - administrace: <http://127.0.0.1:8000/admin> (přihlas se jménem a heslem z kroku 3)
+   - veřejná stránka ukázkové modelky: <http://127.0.0.1:8000/m/nessa-wren>
+
+Ukázková data smažeš příkazem `php bin/console demo:clear` (tvoje vlastní data zůstanou). Když chybí PHP rozšíření, aplikace to napíše (např. „Chybí PHP rozšíření sodium“) — stačí ho zapnout v `php.ini`.
+
+Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
+
 ## Co systém umí
 
 | Oblast | Funkce |
