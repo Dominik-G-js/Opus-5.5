@@ -28,17 +28,32 @@ final class FanvueClient
     /** @var callable(int): void */
     private $sleeper;
 
-    /** @param (callable(int): void)|null $sleeper pro testy */
+    private readonly string $authBase;
+    private readonly string $apiBase;
+
+    /**
+     * @param (callable(int): void)|null $sleeper pro testy
+     * @param string $authBase / $apiBase jiné než výchozí jen pro testovací (mock) server
+     */
     public function __construct(
         private readonly HttpClient $http,
         private readonly string $clientId,
         private readonly string $clientSecret,
         private readonly string $apiVersion = self::DEFAULT_API_VERSION,
         ?callable $sleeper = null,
+        string $authBase = self::AUTH_BASE,
+        string $apiBase = self::API_BASE,
     ) {
         $this->sleeper = $sleeper ?? static function (int $seconds): void {
             sleep($seconds);
         };
+        foreach ([$authBase, $apiBase] as $base) {
+            if (!str_starts_with($base, 'https://')) {
+                throw new FanvueException('Adresa Fanvue API musí začínat https://.');
+            }
+        }
+        $this->authBase = rtrim($authBase, '/');
+        $this->apiBase = rtrim($apiBase, '/');
     }
 
     public function isConfigured(): bool
@@ -56,7 +71,7 @@ final class FanvueClient
 
     public function authorizationUrl(string $redirectUri, string $state, string $codeChallenge): string
     {
-        return self::AUTH_BASE . '/oauth2/auth?' . http_build_query([
+        return $this->authBase . '/oauth2/auth?' . http_build_query([
             'response_type' => 'code',
             'client_id' => $this->clientId,
             'redirect_uri' => $redirectUri,
@@ -161,7 +176,7 @@ final class FanvueClient
      */
     private function get(string $accessToken, string $path, array $query = []): array
     {
-        $url = self::API_BASE . $path . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+        $url = $this->apiBase . $path . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
         $headers = [
             'Authorization' => 'Bearer ' . $accessToken,
             'X-Fanvue-API-Version' => $this->apiVersion,
@@ -199,7 +214,7 @@ final class FanvueClient
         if (!$this->isConfigured()) {
             throw new FanvueException('Chybí fanvue.client_id / client_secret v config/config.php.');
         }
-        $response = $this->send('POST', self::AUTH_BASE . '/oauth2/token', [
+        $response = $this->send('POST', $this->authBase . '/oauth2/token', [
             'Content-Type' => 'application/x-www-form-urlencoded',
             'Accept' => 'application/json',
             'Authorization' => 'Basic ' . base64_encode($this->clientId . ':' . $this->clientSecret),

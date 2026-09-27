@@ -32,8 +32,6 @@ final class Console
       sync [--account=ID]     Stáhne data z Fanvue API (pro cron, např. každou hodinu)
       rates:refresh           Stáhne aktuální kurzy ČNB (USD, EUR, GBP)
       cleanup                 Smaže staré pokusy o přihlášení a dočasné soubory
-      demo                    Naplní prázdnou instalaci ukázkovými daty (na vyzkoušení)
-      demo:clear              Smaže jen ukázková data
 
     Heslo lze předat i proměnnou prostředí AMS_PASSWORD (pro automatizaci).
 
@@ -59,8 +57,6 @@ final class Console
                 'sync' => $this->sync($options),
                 'rates:refresh' => $this->ratesRefresh(),
                 'cleanup' => $this->cleanup(),
-                'demo' => $this->demo(),
-                'demo:clear' => $this->demoClear(),
                 'help', '--help', '-h' => $this->help(),
                 default => $this->fail("Neznámý příkaz „{$command}“.\n\n" . self::HELP),
             };
@@ -228,26 +224,6 @@ final class Console
         }
         $runs = $app->db->run("DELETE FROM sync_runs WHERE started_at < :d", ['d' => gmdate('Y-m-d H:i:s', time() - 90 * 86400)])->rowCount();
         $this->line("✔ Smazáno: {$attempts} pokusů o přihlášení, {$files} dočasných souborů, {$runs} starých záznamů synchronizace.");
-
-        return 0;
-    }
-
-    private function demo(): int
-    {
-        $app = $this->app();
-        $result = (new DemoSeeder($app->db, Services::imageStore($app)))->seed();
-        $this->line("✔ Ukázková data: modelka Nessa Wren, {$result['transactions']} plateb za 5 měsíců, náklady, fanoušci, odkazy.");
-        $this->line('  Landing page: ' . $app->urls->absolutePublic('/m/nessa-wren'));
-        $this->line('  Smazání ukázky: php bin/console demo:clear');
-
-        return 0;
-    }
-
-    private function demoClear(): int
-    {
-        $app = $this->app();
-        $count = (new DemoSeeder($app->db, Services::imageStore($app)))->clear();
-        $this->line("✔ Smazána ukázková data ({$count} modelky).");
 
         return 0;
     }

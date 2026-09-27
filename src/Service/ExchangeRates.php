@@ -17,7 +17,7 @@ use DateTimeImmutable;
  */
 final class ExchangeRates
 {
-    private const API = 'https://api.cnb.cz/cnbapi/exrates/daily-currency-month';
+    public const API = 'https://api.cnb.cz/cnbapi/exrates/daily-currency-month';
     private const CURRENT_MONTH_TTL = 3600;
 
     /** @var array<string, true> Měsíce, jejichž stažení v tomto běhu selhalo — neopakovat (každý pokus = timeout). */
@@ -27,6 +27,7 @@ final class ExchangeRates
         private readonly Database $db,
         private readonly HttpClient $http,
         private readonly ?Logger $logger = null,
+        private readonly string $apiUrl = self::API,
     ) {
     }
 
@@ -122,7 +123,7 @@ final class ExchangeRates
     /** @throws ExchangeRateUnavailable */
     private function fetchMonth(string $currency, string $yearMonth): int
     {
-        $url = self::API . '?' . http_build_query(['currency' => $currency, 'yearMonth' => $yearMonth]);
+        $url = $this->apiUrl . '?' . http_build_query(['currency' => $currency, 'yearMonth' => $yearMonth]);
         try {
             $response = $this->http->request('GET', $url, ['Accept' => 'application/json']);
             if (!$response->ok()) {

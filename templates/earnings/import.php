@@ -5,7 +5,8 @@
 <section class="card">
   <p>Nahraj CSV export plateb z platformy (výpis, statement). V dalším kroku přiřadíš sloupce. Opakovaný import stejného souboru nevytvoří duplicity.</p>
   <?php if ($accountOptions === []): ?>
-    <div class="callout">Nejdřív přidej modelce účet na platformě.</div>
+    <div class="callout">Nejdřív přidej AI modelku a na jejím profilu jí založ účet na platformě.
+      <p class="mt-1"><a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a></p></div>
   <?php else: ?>
   <form method="post" action="<?= $v->url('/earnings/import') ?>" enctype="multipart/form-data">
     <?= $v->csrfField() ?>

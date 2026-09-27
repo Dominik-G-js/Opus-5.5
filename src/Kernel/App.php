@@ -7,6 +7,7 @@ namespace App\Kernel;
 use App\Controller\Admin;
 use App\Controller\PublicSite\PublicController;
 use App\Database\Database;
+use App\Integration\Fanvue\FanvueClient;
 use App\Security\Auth;
 use App\Security\Crypto;
 use App\Security\Csrf;
@@ -262,15 +263,32 @@ final class App
         return $response->withHeader('Cache-Control', 'no-store');
     }
 
+    private function fanvueAuthOrigin(): string
+    {
+        $parts = parse_url($this->config->string('fanvue.auth_base', FanvueClient::AUTH_BASE));
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            return FanvueClient::AUTH_BASE;
+        }
+
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    }
+
     private function withSecurityHeaders(Response $response, Request $request): Response
     {
+        if (str_starts_with((string) $response->header('Content-Type'), 'image/')) {
+            // Samostatně otevřený obrázek: prohlížeč si kolem něj staví vlastní stránku s inline styly; žádné skripty.
+            $response->withHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+        }
         $styleSrc = $this->cspNonce !== null ? "'self' 'nonce-{$this->cspNonce}'" : "'self'";
-        $formAction = "'self' https://auth.fanvue.com";
+        // Připojení Fanvue = POST s přesměrováním na jejich autorizační server (Chrome to hlídá přes form-action).
+        $formAction = "'self' " . $this->fanvueAuthOrigin();
         $csp = "default-src 'self'; img-src 'self' data:; style-src {$styleSrc}; script-src 'self'; "
             . "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action {$formAction}";
 
+        if (!$response->hasHeader('Content-Security-Policy')) {
+            $response->withHeader('Content-Security-Policy', $csp);
+        }
         $response
-            ->withHeader('Content-Security-Policy', $csp)
             ->withHeader('X-Content-Type-Options', 'nosniff')
             ->withHeader('X-Frame-Options', 'DENY')
             ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')

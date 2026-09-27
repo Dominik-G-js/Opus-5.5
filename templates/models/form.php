@@ -74,8 +74,8 @@ $input = static function (string $key, string $label, string $hint = '') use ($v
     <legend>Technické nastavení generování</legend>
     <div class="form-grid">
       <?= $input('base_model', 'Základní model', 'Např. FLUX.1 dev, SDXL (Juggernaut), Higgsfield Soul…') ?>
-      <?= $input('lora_name', 'Název LoRA', 'Soubor / verze, např. nessa_v3.safetensors') ?>
-      <?= $input('lora_trigger', 'Trigger slovo', 'Unikátní, např. ohwx_nessa') ?>
+      <?= $input('lora_name', 'Název LoRA', 'Soubor / verze, např. jmeno_v1.safetensors') ?>
+      <?= $input('lora_trigger', 'Trigger slovo', 'Unikátní, např. ohwx_jmeno') ?>
       <?= $input('lora_weight', 'Síla LoRA', 'Typicky 0.6–0.9') ?>
       <?= $input('lora_location', 'Kde je LoRA uložená', 'Cesta / úložiště (záloha!)') ?>
       <?= $input('default_seed', 'Výchozí seed') ?>
@@ -96,14 +96,14 @@ $input = static function (string $key, string $label, string $hint = '') use ($v
       </div>
       <div class="field">
         <label for="page_domain">Vlastní doména</label>
-        <input type="text" id="page_domain" name="page_domain" placeholder="nessawren.com" value="<?= $val('page_domain') ?>">
+        <input type="text" id="page_domain" name="page_domain" placeholder="jmeno-modelky.com" value="<?= $val('page_domain') ?>">
         <p class="hint">Volitelné. Doména musí mířit na tento server (složka public/). Jinak adresa /m/slug.</p>
         <?= $v->error('page_domain') ?>
       </div>
       <div class="field">
         <label for="seo_title">SEO titulek (max. 70)</label>
         <input type="text" id="seo_title" name="seo_title" maxlength="70" value="<?= $val('seo_title') ?>">
-        <p class="hint">Např. „Nessa Wren — AI creator | Fanvue, X &amp; TikTok“</p>
+        <p class="hint">Např. „Jméno — AI creator | Fanvue, X &amp; TikTok“</p>
         <?= $v->error('seo_title') ?>
       </div>
       <div class="field">
@@ -126,7 +126,7 @@ $input = static function (string $key, string $label, string $hint = '') use ($v
     <?= $textarea('notes', 'Interní poznámky', '', 4) ?>
   </fieldset>
 
-  <button type="submit" class="btn btn-primary">Uložit</button>
+  <button type="submit" class="btn btn-primary"><?= $model === null ? 'Přidat AI modelku' : 'Uložit' ?></button>
 </form>
 
 <?php if ($model !== null): ?>

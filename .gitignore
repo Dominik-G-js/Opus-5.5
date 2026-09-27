@@ -4,3 +4,4 @@
 !/storage/.gitkeep
 /.phpunit.cache
 .DS_Store
+__pycache__/

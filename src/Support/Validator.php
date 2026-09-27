@@ -134,7 +134,7 @@ final class Validator
             return null;
         }
         if (preg_match('/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $value) !== 1) {
-            $this->errors[$field] = "{$label}: zadej doménu bez https:// (např. lunavale.com).";
+            $this->errors[$field] = "{$label}: zadej doménu bez https:// (např. jmeno-modelky.com).";
         }
 
         return $value;

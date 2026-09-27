@@ -15,7 +15,7 @@ use App\Support\Money;
 final class ViewHelpers
 {
     /** Zvýšit při změně CSS/JS kvůli cache prohlížeče. */
-    private const ASSET_VERSION = '2';
+    private const ASSET_VERSION = '5';
 
     /** @var array<string, mixed> */
     private array $old = [];
@@ -131,6 +131,20 @@ final class ViewHelpers
     public function hasErrors(): bool
     {
         return $this->errors !== [];
+    }
+
+    /** Souhrn všech chyb formuláře nahoře — žádná hláška tak nezůstane skrytá (ani u polí bez vlastního výpisu). */
+    public function errorSummary(): string
+    {
+        if ($this->errors === []) {
+            return '';
+        }
+        $items = '';
+        foreach ($this->errors as $field => $message) {
+            $items .= '<li><a href="#' . $this->e($field) . '">' . $this->e($message) . '</a></li>';
+        }
+
+        return '<div class="error-summary" role="alert"><strong>Oprav prosím:</strong><ul>' . $items . '</ul></div>';
     }
 
     /**

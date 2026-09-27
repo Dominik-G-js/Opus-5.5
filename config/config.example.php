@@ -44,5 +44,6 @@ return [
         'client_id' => '',
         'client_secret' => '',
         'api_version' => '2025-06-26',
+        // 'auth_base' / 'api_base' měň jen pro testovací (mock) server — viz tests/e2e/integration.py.
     ],
 ];

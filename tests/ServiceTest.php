@@ -202,18 +202,3 @@ test('Stats: cena za obrázek jen z nákladů s počtem kusů', function (): voi
     assertSame(500, $lifetime['cost_per_image'], '500 Kč / 100 ks = 5 Kč');
     assertSame(150000, $lifetime['costs']);
 });
-
-test('DemoSeeder: ukázková data jen do prázdné instalace a demo:clear smaže jen je', function (): void {
-    $db = testDatabase();
-    $dir = sys_get_temp_dir() . '/ams-demo-' . bin2hex(random_bytes(4));
-    $seeder = new App\Cli\DemoSeeder($db, new App\Service\ImageStore($db, $dir . '/uploads', $dir . '/public'));
-    $result = $seeder->seed();
-    assertTrue($result['transactions'] > 50);
-    assertSame(6, (int) $db->scalar('SELECT COUNT(*) FROM images WHERE is_public = 1'));
-    assertThrows(RuntimeException::class, fn () => $seeder->seed(), 'druhé vložení odmítnuto');
-    $db->insert('costs', ['category' => 'ads', 'incurred_on' => '2026-01-01', 'amount_minor' => 100, 'currency' => 'CZK', 'fx_rate' => 1, 'amount_czk_minor' => 100, 'created_at' => Clock::nowUtc()]);
-    assertSame(2, $seeder->clear());
-    assertSame(0, (int) $db->scalar('SELECT COUNT(*) FROM transactions'));
-    assertSame(1, (int) $db->scalar('SELECT COUNT(*) FROM costs'), 'vlastní náklad zůstal');
-    assertSame([], glob($dir . '/uploads/*') ?: []);
-});

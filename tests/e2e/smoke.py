@@ -1,21 +1,21 @@
-"""End-to-end průchod celou aplikací proti běžícímu VÝVOJOVÉMU serveru.
+"""End-to-end průchod hlavními scénáři: přihlášení, modelka, prompty s historií, obrázky (očištění metadat),
+účty, příjmy, náklady, fanoušci, odkazy, veřejná stránka, 2FA, změna hesla, CSV import/export.
 
-POZOR: zapisuje testovací data (modelku, platby, 2FA). Nikdy nespouštěj proti produkci.
-
-Příprava (čistá databáze):
-    rm -f storage/database.sqlite*
-    AMS_PASSWORD='Velmi-Tajne-Heslo-2026!' php bin/console install --base-url=http://127.0.0.1:8000 --admin-path=/admin --username=dominik
-    php -S 127.0.0.1:8000 -t public bin/dev-router.php
-Spuštění:
-    AMS_PASSWORD='Velmi-Tajne-Heslo-2026!' python3 tests/e2e/smoke.py      (vyžaduje pip install requests)
+Nainstaluje čistou kopii aplikace (prázdná DB) — nic dalšího není potřeba spouštět.
+Spuštění z kořene projektu:  python3 tests/e2e/smoke.py        (vyžaduje PHP a pip install requests)
 """
 import base64, hashlib, hmac, os, re, struct, subprocess, sys, time
 import requests
 
-B = os.environ.get("AMS_BASE", "http://127.0.0.1:8000")
-A = B + os.environ.get("AMS_ADMIN", "/admin")
-USER = os.environ.get("AMS_USER", "dominik")
-PASSWORD = os.environ["AMS_PASSWORD"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from harness import USER, PASSWORD, AppUnderTest  # noqa: E402
+
+import atexit  # noqa: E402
+
+_app = AppUnderTest(8768).__enter__()
+atexit.register(_app.__exit__, None, None, None)  # úklid i při pádu testu
+B = _app.base
+A = _app.admin
 s = requests.Session()
 s.trust_env = False  # nepoužívat proxy pro localhost
 fails = []

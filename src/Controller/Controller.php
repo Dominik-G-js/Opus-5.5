@@ -46,8 +46,7 @@ abstract class Controller
         $messages = $errors instanceof Validator ? $errors->errors() : $errors;
         $this->app->session->set('_errors', $messages);
         $this->app->session->flashInput($request->post);
-        $this->flash('error', 'Formulář obsahuje chyby — oprav zvýrazněná pole.');
-
+        
         return $this->redirect($adminPath);
     }
 

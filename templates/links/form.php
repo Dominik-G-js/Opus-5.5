@@ -5,6 +5,10 @@ $l = $link ?? [];
 $val = static fn (string $key, mixed $default = '') => $v->old($key, $l[$key] ?? $default);
 ?>
 <div class="page-head"><h1><?= $v->e($title) ?></h1><a class="btn" href="<?= $v->url('/links') ?>">Zpět</a></div>
+<?php if ($modelOptions === []): ?>
+  <div class="callout">Odkaz patří ke konkrétní modelce — nejdřív ji přidej.
+    <p class="mt-1"><a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a></p></div>
+<?php else: ?>
 <section class="card">
 <form method="post" action="<?= $link === null ? $v->url('/links') : $v->url('/links/' . $link['id']) ?>">
   <?= $v->csrfField() ?>
@@ -27,3 +31,4 @@ $val = static fn (string $key, mixed $default = '') => $v->old($key, $l[$key] ??
   <form method="post" action="<?= $v->url('/links/' . $link['id'] . '/delete') ?>" data-confirm="Smazat odkaz i statistiky?"><?= $v->csrfField() ?><button type="submit" class="link-btn danger">Smazat odkaz</button></form>
 <?php endif; ?>
 </section>
+<?php endif; ?>

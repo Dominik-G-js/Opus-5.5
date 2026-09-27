@@ -84,7 +84,7 @@ $jsonLdOut = json_encode(
 <meta name="twitter:title" content="<?= $v->e($pageTitle) ?>">
 <meta name="twitter:description" content="<?= $v->e($description) ?>">
 <meta name="theme-color" content="#16121a">
-<?php if ($avatarUrl !== null): ?><link rel="icon" href="<?= $v->e($avatarUrl) ?>" type="image/jpeg"><?php endif; ?>
+<?php if ($avatarUrl !== null): ?><link rel="icon" href="<?= $v->e($avatarUrl) ?>" type="image/jpeg"><?php else: ?><link rel="icon" href="data:,"><?php endif; ?>
 <script type="application/ld+json"><?= $jsonLdOut ?></script>
 <style nonce="<?= $v->e($nonce) ?>">
 :root{color-scheme:dark;--bg:#16121a;--card:#221c28;--ink:#fbf8ff;--ink2:#cfc6da;--muted:#a79db3;--line:rgba(255,255,255,.12);--accent:#f0a3c4;--accent-ink:#1b1020}

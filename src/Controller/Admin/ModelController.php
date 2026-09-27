@@ -59,7 +59,7 @@ final class ModelController extends Controller
 
     public function create(Request $request): Response
     {
-        return $this->render('models/form', ['title' => 'Nová modelka', 'model' => null]);
+        return $this->render('models/form', ['title' => 'Přidat AI modelku', 'model' => null]);
     }
 
     public function store(Request $request): Response
@@ -70,7 +70,7 @@ final class ModelController extends Controller
         }
         $now = Clock::nowUtc();
         $id = $this->app->db->insert('models', $data + ['created_at' => $now, 'updated_at' => $now]);
-        $this->flash('success', 'Modelka vytvořena. Doplň prompty a nahraj referenční fotky.');
+        $this->flash('success', 'AI modelka přidána. Doplň master prompt, nahraj referenční fotky a přidej účty na platformách.');
 
         return $this->redirect('/models/' . $id);
     }

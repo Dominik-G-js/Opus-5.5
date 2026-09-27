@@ -18,7 +18,12 @@ final class Services
 {
     public static function exchangeRates(App $app): ExchangeRates
     {
-        return new ExchangeRates($app->db, new CurlHttpClient(), $app->logger);
+        return new ExchangeRates(
+            $app->db,
+            new CurlHttpClient(),
+            $app->logger,
+            $app->config->string('cnb.api_url', ExchangeRates::API),
+        );
     }
 
     public static function ledger(App $app): Ledger
@@ -38,6 +43,9 @@ final class Services
             $app->config->string('fanvue.client_id'),
             $app->config->string('fanvue.client_secret'),
             $app->config->string('fanvue.api_version', FanvueClient::DEFAULT_API_VERSION),
+            null,
+            $app->config->string('fanvue.auth_base', FanvueClient::AUTH_BASE),
+            $app->config->string('fanvue.api_base', FanvueClient::API_BASE),
         );
     }
 

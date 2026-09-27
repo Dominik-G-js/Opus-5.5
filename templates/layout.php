@@ -31,6 +31,7 @@ $nav = [
   <aside class="sidebar">
     <a class="brand" href="<?= $v->url() ?>"><?= $v->e($v->appName) ?></a>
     <?php if ($user !== null): ?>
+    <a class="btn btn-primary btn-add" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
     <nav aria-label="Hlavní menu">
       <ul class="nav">
         <?php foreach ($nav as $path => $label): ?>
@@ -49,6 +50,7 @@ $nav = [
   </aside>
   <main class="main">
     <?= $view->partial('partials/flashes') ?>
+    <?= $v->errorSummary() ?>
     <?= $content ?>
   </main>
 </div>

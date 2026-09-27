@@ -1,7 +1,8 @@
 <?php /** @var App\Kernel\ViewHelpers $v */ ?>
 <div class="page-head"><h1>Přidat příjem</h1><a class="btn" href="<?= $v->url('/earnings') ?>">Zpět</a></div>
 <?php if ($accountOptions === []): ?>
-  <div class="callout">Nejdřív vytvoř modelku a přidej jí účet na platformě.</div>
+  <div class="callout">Příjmy se zapisují k účtu modelky na platformě. Nejdřív přidej AI modelku a na jejím profilu jí založ účet (např. Fanvue).
+    <p class="mt-1"><a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a></p></div>
 <?php else: ?>
 <section class="card">
 <form method="post" action="<?= $v->url('/earnings') ?>">

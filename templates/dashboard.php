@@ -10,16 +10,19 @@ $basisLabel = $goalBasis === 'net' ? 'příjmy po poplatcích' : 'čistý zisk (
     <?php if ($nextMonth !== null): ?>
       <a class="btn btn-sm" href="<?= $v->url('', ['month' => $nextMonth]) ?>"><?= $v->e($nextMonth) ?> →</a>
     <?php endif; ?>
-    <a class="btn btn-sm btn-primary" href="<?= $v->url('/earnings/new') ?>">+ Příjem</a>
+    <a class="btn btn-sm btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
+    <a class="btn btn-sm" href="<?= $v->url('/earnings/new') ?>">+ Příjem</a>
     <a class="btn btn-sm" href="<?= $v->url('/costs/new') ?>">+ Náklad</a>
   </div>
 </div>
 
 <?php if ($modelCount === 0): ?>
-  <div class="callout">
-    <strong>Začni tady:</strong> <a href="<?= $v->url('/models/new') ?>">vytvoř první modelku</a>,
-    přidej jí účty na platformách a náklady na tvorbu. Návod a strategie jsou v <code>docs/</code>.
-  </div>
+  <section class="card empty-start">
+    <h2>Začni první AI modelkou</h2>
+    <p>Vyplň její vzhled a povahu (character bible), ulož master prompt, přidej účty na platformách a zapisuj náklady i příjmy. Přehled se pak začne plnit sám.</p>
+    <p><a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a></p>
+    <p class="small muted">Koncepty modelek, prompty a strategie najdeš v <code>docs/</code>.</p>
+  </section>
 <?php endif; ?>
 
 <?php foreach ($syncErrors as $error): ?>

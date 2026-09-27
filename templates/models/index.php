@@ -1,13 +1,13 @@
 <?php /** @var App\Kernel\ViewHelpers $v */ ?>
 <div class="page-head">
   <h1>Modelky</h1>
-  <a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Nová modelka</a>
+  <a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
 </div>
 
 <?php if ($models === []): ?>
   <div class="card">
     <p>Zatím žádná modelka. Inspiraci na koncepty, prompty a postup najdeš v <code>docs/03-modelky-koncepty-a-prompty.md</code>.</p>
-    <a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">Vytvořit první modelku</a>
+    <a class="btn btn-primary" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
   </div>
 <?php else: ?>
 <div class="card table-wrap">

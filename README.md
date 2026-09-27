@@ -11,7 +11,7 @@ Strategie, rešerše a plán jsou v `docs/`:
 
 ## Jak si aplikaci proklikat (lokálně, 5 minut)
 
-Potřebuješ jen PHP 8.2 nebo novější — žádnou databázi ani webserver.
+Potřebuješ jen PHP 8.2 nebo novější — žádnou databázi ani webserver. Aplikace startuje prázdná, bez ukázkových dat.
 
 1. **PHP**
    - Windows: [Laragon](https://laragon.org) nebo [XAMPP](https://www.apachefriends.org) (obsahují PHP), případně zip z [windows.php.net](https://windows.php.net/download/). V `php.ini` musí být zapnuté: `extension=curl`, `fileinfo`, `gd`, `intl`, `mbstring`, `pdo_sqlite`, `sodium`.
@@ -21,15 +21,12 @@ Potřebuješ jen PHP 8.2 nebo novější — žádnou databázi ani webserver.
 3. **Ve složce projektu spusť:**
    ```bash
    php bin/console install --base-url=http://127.0.0.1:8000 --admin-path=/admin
-   php bin/console demo
    php -S 127.0.0.1:8000 -t public bin/dev-router.php
    ```
-   `install` se zeptá na jméno a heslo (min. 12 znaků), `demo` naplní ukázková data (modelka s 5 měsíci příjmů, fanoušci, náklady, prompty, odkazy).
-4. **Otevři v prohlížeči:**
-   - administrace: <http://127.0.0.1:8000/admin> (přihlas se jménem a heslem z kroku 3)
-   - veřejná stránka ukázkové modelky: <http://127.0.0.1:8000/m/nessa-wren>
+   `install` se zeptá na jméno a heslo (min. 12 znaků) a připraví prázdnou databázi.
+4. **Otevři v prohlížeči** <http://127.0.0.1:8000/admin>, přihlas se a tlačítkem **+ Přidat AI modelku** (v levém menu nebo na přehledu) založ první modelku.
 
-Ukázková data smažeš příkazem `php bin/console demo:clear` (tvoje vlastní data zůstanou). Když chybí PHP rozšíření, aplikace to napíše (např. „Chybí PHP rozšíření sodium“) — stačí ho zapnout v `php.ini`.
+Když chybí PHP rozšíření, aplikace to napíše (např. „Chybí PHP rozšíření sodium“) — stačí ho zapnout v `php.ini`.
 
 Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 
@@ -78,7 +75,7 @@ Document root musí být složka `public/` — zbytek projektu (config, storage,
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name studio.example.com nessawren.com;   # admin doména + vlastní domény modelek
+    server_name studio.example.com jmeno-modelky.com;   # admin doména + vlastní domény modelek
     root /var/www/ai-model-studio/public;
     client_max_body_size 16m;
 
@@ -99,7 +96,7 @@ server {
 - V PHP nastav `upload_max_filesize = 16M` a `post_max_size = 20M`.
 
 ### Vlastní doména modelky
-V profilu modelky vyplň doménu (např. `nessawren.com`) a nasměruj ji (DNS + vhost) na **stejnou** složku `public/`. Systém ji pozná podle hlavičky Host a na `/` zobrazí landing page. `www.` se přesměruje na doménu bez www. Administrace na cizích doménách není dostupná.
+V profilu modelky vyplň doménu (např. `jmeno-modelky.com`) a nasměruj ji (DNS + vhost) na **stejnou** složku `public/`. Systém ji pozná podle hlavičky Host a na `/` zobrazí landing page. `www.` se přesměruje na doménu bez www. Administrace na cizích doménách není dostupná.
 
 ### Cron
 ```cron
@@ -147,8 +144,15 @@ git pull && php bin/console migrate
 ```bash
 php bin/console install --base-url=http://127.0.0.1:8000 --admin-path=/admin
 php -S 127.0.0.1:8000 -t public bin/dev-router.php
-php tests/run.php                                   # unit testy (bez závislostí)
-AMS_PASSWORD='…' python3 tests/e2e/smoke.py         # průchod celou aplikací — jen proti vývojové instanci!
+php tests/run.php                  # unit testy (bez závislostí)
+```
+
+E2E testy (Python 3 + `pip install requests`) si samy nainstalují čistou kopii aplikace do dočasné složky, spustí ji na vlastním portu a po sobě vše smažou — tvoje data ani běžící instance neovlivní:
+```bash
+python3 tests/e2e/smoke.py         # průchod hlavními scénáři (modelka, prompty, obrázky, příjmy, 2FA, CSV…)
+python3 tests/e2e/forms.py         # všechny formuláře: validace, chyby, mazání, prázdné stavy, procházení odkazů
+python3 tests/e2e/security.py      # CSRF, přístup bez přihlášení, brute-force limit, hlavičky, upload, path traversal…
+python3 tests/e2e/integration.py   # Fanvue OAuth + synchronizace a kurzy ČNB proti lokálnímu HTTPS mock serveru (potřebuje openssl)
 ```
 
 ## Struktura
