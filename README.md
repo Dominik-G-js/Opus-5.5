@@ -34,7 +34,7 @@ Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 
 | Oblast | Funkce |
 |---|---|
-| **Přehled** | měsíční cíl (výchozí 10 000 Kč zisku) s odhadem do konce měsíce, příjmy vs. náklady za 12 měsíců, zisk a ROI podle modelek, platforem a typů plateb, top fanoušci, prokliky podle zdroje |
+| **Přehled** | období měsíc / 7 dní / 30 dní / od začátku roku se srovnáním s předchozím obdobím, čistý příjem, hrubé tržby, poplatky, náklady a zisk s průběhem, graf příjmů podle typu plateb (tooltip s rozpadem podle platforem), podíl platforem s AI politikou, karty modelek (tržby, změna, platformy, nejziskovější typ, zisk a ROI), nejvyšší platby, měsíční cíl (výchozí 10 000 Kč zisku) s odhadem a potřebným tempem, příjmy vs. náklady za 12 měsíců, top fanoušci, prokliky podle zdroje |
 | **Modelky** | profil a character bible (vzhled, povaha, příběh), technika (základní model, LoRA, trigger, seed), použité AI nástroje, tisknutelná „Character bible“ |
 | **Prompty** | knihovna promptů podle typu, master prompt předvyplněný z character bible, hodnocení, **historie verzí s obnovením** |
 | **Obrázky** | soukromé úložiště (originály i s metadaty), referenční fotky, zveřejnění na landing page jako **očištěná kopie bez metadat** (prompty z ComfyUI neuniknou) |
@@ -48,6 +48,9 @@ Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 - **Fanvue** — oficiální API (OAuth 2.0 + PKCE). Stahuje každou platbu (typ, částka, fanoušek) a denní počty nových/zrušených předplatitelů. Endpointy ověřené z oficiálních balíčků `@fanvue/builder-sdk` a `@fanvue/n8n-nodes-fanvue`.
 - **OnlyFans** — nemá oficiální API; neoficiální služby porušují podmínky OF a hrozí ban. Navíc OF čistě AI modelky zakazuje. Proto žádné napojení — případně ruční zadání / CSV.
 - **Ostatní** (Fansly, Patreon…) — ruční zadání nebo CSV import.
+
+### Vzhled
+Administrace má tmavý „Dark Luxury“ vzhled, pokud má systém tmavý režim, jinak jeho světlou variantu. Grafy se vykreslují na serveru jako SVG (bez knihoven a inline stylů kvůli CSP), písmo Plus Jakarta Sans je přibalené v `public/assets/fonts/` (licence SIL OFL, `OFL.txt`), ikony jsou z [Lucide](https://lucide.dev) (ISC). Předloha je React prototyp v `design/admin-redesign/`.
 
 ## Požadavky
 - PHP **8.2+** s rozšířeními `pdo_sqlite`, `sodium`, `curl`, `mbstring`, `gd`, `fileinfo` (volitelně `intl` pro hezčí slugy)

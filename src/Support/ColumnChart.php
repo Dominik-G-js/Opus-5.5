@@ -36,7 +36,7 @@ final class ColumnChart
         foreach ($series as $s) {
             $max = max($max, ...$s['values']);
         }
-        [$axisMax, $step] = self::niceScale($max);
+        [$axisMax, $step] = ChartScale::nice($max);
 
         $plotW = self::WIDTH - self::PAD_LEFT - self::PAD_RIGHT;
         $plotH = self::HEIGHT - self::PAD_TOP - self::PAD_BOTTOM;
@@ -62,7 +62,7 @@ final class ColumnChart
                 '<text class="chart-tick" x="%d" y="%.1f" text-anchor="end" dominant-baseline="middle">%s</text>',
                 self::PAD_LEFT - 6,
                 $y,
-                $e(self::compact($tick))
+                $e(ChartScale::compact($tick))
             );
         }
 
@@ -114,36 +114,5 @@ final class ColumnChart
             $x + $w, $top, $x + $w, $top + $r,
             $baseline
         );
-    }
-
-    /** @return array{0: int, 1: int} [maximum osy, krok] v haléřích, kulaté hodnoty v Kč. */
-    private static function niceScale(int $maxMinor): array
-    {
-        $max = max(1, $maxMinor / 100);
-        $rawStep = $max / 4;
-        $magnitude = 10 ** floor(log10($rawStep));
-        $step = $magnitude;
-        foreach ([1, 2, 2.5, 5, 10] as $multiplier) {
-            if ($multiplier * $magnitude >= $rawStep) {
-                $step = $multiplier * $magnitude;
-                break;
-            }
-        }
-        $step = max(1, (int) round($step));
-
-        return [(int) (ceil($max / $step) * $step * 100), $step * 100];
-    }
-
-    private static function compact(int $minor): string
-    {
-        $value = $minor / 100;
-        if ($value >= 1_000_000) {
-            return rtrim(rtrim(number_format($value / 1_000_000, 1, ',', ''), '0'), ',') . ' mil.';
-        }
-        if ($value >= 100_000) {
-            return rtrim(rtrim(number_format($value / 1000, 1, ',', ''), '0'), ',') . ' tis.';
-        }
-
-        return number_format($value, 0, ',', "\u{00A0}");
     }
 }

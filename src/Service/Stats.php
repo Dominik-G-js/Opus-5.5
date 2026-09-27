@@ -10,9 +10,18 @@ use DateTimeImmutable;
 
 /**
  * Agregace pro dashboard a detail modelky. Vše v CZK (haléře), měsíce podle lokálního data.
+ * Metody s parametrem Period pracují s libovolným obdobím [from, to), měsíční metody jsou jejich zkratky.
  */
 final class Stats
 {
+    /** Skupiny typů plateb pro grafy (klíče odpovídají Labels „tx_group“). */
+    public const TYPE_GROUPS = [
+        'subscription' => ['subscription', 'renewal'],
+        'tip' => ['tip'],
+        'ppv' => ['message', 'post', 'media_link'],
+        'other' => ['referral', 'affiliate', 'giveaway', 'other'],
+    ];
+
     public function __construct(private readonly Database $db)
     {
     }
@@ -25,15 +34,59 @@ final class Stats
         return [$start->format('Y-m-d'), $start->modify('first day of next month')->format('Y-m-d')];
     }
 
-    public static function isValidMonth(string $value): bool
+    public static function isValidMonth(mixed $value): bool
     {
-        return preg_match('/^(19|20)\d{2}-(0[1-9]|1[0-2])$/', $value) === 1;
+        return is_string($value) && preg_match('/^(19|20)\d{2}-(0[1-9]|1[0-2])$/', $value) === 1;
+    }
+
+    public static function typeGroup(string $type): string
+    {
+        foreach (self::TYPE_GROUPS as $group => $types) {
+            if (in_array($type, $types, true)) {
+                return $group;
+            }
+        }
+
+        return 'other';
     }
 
     /** @return array<string, mixed> */
     public function monthSummary(string $yearMonth, ?int $modelId = null): array
     {
         [$from, $to] = self::monthRange($yearMonth);
+        $summary = $this->rangeSummary($from, $to, $modelId);
+        $summary['projected_net'] = $this->project($yearMonth, $summary['net']);
+        $summary['projected_profit'] = $summary['projected_net'] - $summary['costs'];
+
+        return $summary;
+    }
+
+    /**
+     * Souhrn za období: hrubé tržby, čistě po poplatcích, poplatky, náklady (z toho společné), zisk, předplatitelé.
+     *
+     * @return array<string, int>
+     */
+    public function summary(Period $period, ?int $modelId = null): array
+    {
+        return $this->rangeSummary($period->from, $period->to, $modelId);
+    }
+
+    /** Lineární odhad za celý měsíc (jen pro běžící měsíc). */
+    private function project(string $yearMonth, int $soFar): int
+    {
+        $today = Clock::todayLocal();
+        if (substr($today, 0, 7) !== $yearMonth) {
+            return $soFar;
+        }
+        $day = (int) substr($today, 8, 2);
+        $daysInMonth = (int) (new DateTimeImmutable($yearMonth . '-01'))->format('t');
+
+        return (int) round($soFar / max(1, $day) * $daysInMonth);
+    }
+
+    /** @return array<string, int> */
+    private function rangeSummary(string $from, string $to, ?int $modelId): array
+    {
         $modelFilter = $modelId !== null ? ' AND a.model_id = :m' : '';
         $params = ['s' => $from, 'e' => $to] + ($modelId !== null ? ['m' => $modelId] : []);
 
@@ -65,47 +118,56 @@ final class Stats
             'fees' => (int) $revenue['gross'] - $net,
             'count' => (int) $revenue['count'],
             'costs' => $costs,
+            'shared_costs' => $modelId === null ? $this->rangeSharedCosts($from, $to) : 0,
             'profit' => $net - $costs,
             'new_subs' => (int) $subs['new_subs'],
             'cancelled' => (int) $subs['cancelled'],
-            'projected_net' => $this->project($yearMonth, $net),
-            'projected_profit' => $this->project($yearMonth, $net) - $costs,
         ];
-    }
-
-    /** Lineární odhad za celý měsíc (jen pro běžící měsíc). */
-    private function project(string $yearMonth, int $soFar): int
-    {
-        $today = Clock::todayLocal();
-        if (substr($today, 0, 7) !== $yearMonth) {
-            return $soFar;
-        }
-        $day = (int) substr($today, 8, 2);
-        $daysInMonth = (int) (new DateTimeImmutable($yearMonth . '-01'))->format('t');
-
-        return (int) round($soFar / max(1, $day) * $daysInMonth);
     }
 
     /** @return list<array<string, mixed>> */
     public function byModel(string $yearMonth): array
     {
         [$from, $to] = self::monthRange($yearMonth);
+
+        return $this->rangeByModel($from, $to);
+    }
+
+    /**
+     * Modelky za období: hrubě, čistě, náklady, zisk, ROI a počet plateb.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function modelsIn(Period $period): array
+    {
+        return $this->rangeByModel($period->from, $period->to);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function rangeByModel(string $from, string $to): array
+    {
         $rows = $this->db->all(
-            "SELECT m.id, m.name, m.status,
-                COALESCE((SELECT SUM(t.net_czk_minor) FROM transactions t JOIN accounts a ON a.id = t.account_id
-                          WHERE a.model_id = m.id AND t.occurred_on >= :s AND t.occurred_on < :e), 0) AS net,
+            "SELECT m.id, m.name, m.status, m.niche, m.avatar_image_id,
+                COALESCE(r.gross, 0) AS gross, COALESCE(r.net, 0) AS net, COALESCE(r.payments, 0) AS payments,
                 COALESCE((SELECT SUM(c.amount_czk_minor) FROM costs c
                           WHERE c.model_id = m.id AND c.incurred_on >= :s AND c.incurred_on < :e), 0) AS costs,
                 COALESCE((SELECT SUM(s.new_subscribers) FROM subscriber_stats_daily s JOIN accounts a ON a.id = s.account_id
                           WHERE a.model_id = m.id AND s.day >= :s AND s.day < :e), 0) AS new_subs
              FROM models m
+             LEFT JOIN (
+                SELECT a.model_id, SUM(t.gross_czk_minor) AS gross, SUM(t.net_czk_minor) AS net, COUNT(*) AS payments
+                FROM transactions t JOIN accounts a ON a.id = t.account_id
+                WHERE t.occurred_on >= :s AND t.occurred_on < :e
+                GROUP BY a.model_id
+             ) r ON r.model_id = m.id
              ORDER BY net DESC, m.name",
             ['s' => $from, 'e' => $to]
         );
 
         return array_map(static function (array $row): array {
-            $row['net'] = (int) $row['net'];
-            $row['costs'] = (int) $row['costs'];
+            foreach (['gross', 'net', 'payments', 'costs', 'new_subs'] as $key) {
+                $row[$key] = (int) $row[$key];
+            }
             $row['profit'] = $row['net'] - $row['costs'];
             $row['roi'] = $row['costs'] > 0 ? ($row['profit'] / $row['costs']) * 100 : null;
 
@@ -113,11 +175,43 @@ final class Stats
         }, $rows);
     }
 
+    /**
+     * Rozpad tržeb každé modelky: hrubě podle platforem a čistě podle skupin typů plateb.
+     *
+     * @return array<int, array{platforms: array<int, int>, groups: array<string, int>}>
+     */
+    public function modelMix(Period $period): array
+    {
+        $rows = $this->db->all(
+            "SELECT a.model_id, a.platform_id, t.type, SUM(t.gross_czk_minor) AS gross, SUM(t.net_czk_minor) AS net
+             FROM transactions t JOIN accounts a ON a.id = t.account_id
+             WHERE t.occurred_on >= :s AND t.occurred_on < :e
+             GROUP BY a.model_id, a.platform_id, t.type",
+            ['s' => $period->from, 'e' => $period->to]
+        );
+        $mix = [];
+        foreach ($rows as $row) {
+            $modelId = (int) $row['model_id'];
+            $platformId = (int) $row['platform_id'];
+            $group = self::typeGroup((string) $row['type']);
+            $mix[$modelId] ??= ['platforms' => [], 'groups' => []];
+            $mix[$modelId]['platforms'][$platformId] = ($mix[$modelId]['platforms'][$platformId] ?? 0) + (int) $row['gross'];
+            $mix[$modelId]['groups'][$group] = ($mix[$modelId]['groups'][$group] ?? 0) + (int) $row['net'];
+        }
+
+        return $mix;
+    }
+
     /** Náklady bez přiřazené modelky (společná režie). */
     public function sharedCosts(string $yearMonth): int
     {
         [$from, $to] = self::monthRange($yearMonth);
 
+        return $this->rangeSharedCosts($from, $to);
+    }
+
+    private function rangeSharedCosts(string $from, string $to): int
+    {
         return (int) $this->db->scalar(
             'SELECT COALESCE(SUM(amount_czk_minor), 0) FROM costs WHERE model_id IS NULL AND incurred_on >= :s AND incurred_on < :e',
             ['s' => $from, 'e' => $to]
@@ -128,6 +222,19 @@ final class Stats
     public function byAccount(string $yearMonth, ?int $modelId = null): array
     {
         [$from, $to] = self::monthRange($yearMonth);
+
+        return $this->rangeByAccount($from, $to, $modelId);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function byAccountIn(Period $period): array
+    {
+        return $this->rangeByAccount($period->from, $period->to, null);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function rangeByAccount(string $from, string $to, ?int $modelId): array
+    {
         $modelFilter = $modelId !== null ? ' AND a.model_id = :m' : '';
 
         return $this->db->all(
@@ -144,14 +251,70 @@ final class Stats
         );
     }
 
+    /**
+     * Platformy s tržbami v období (včetně AI politiky), seřazené podle hrubých tržeb.
+     *
+     * @return list<array{id: int, name: string, ai_policy: string, gross: int, net: int, count: int}>
+     */
+    public function platformsIn(Period $period): array
+    {
+        $rows = $this->db->all(
+            "SELECT p.id, p.name, p.ai_policy, SUM(t.gross_czk_minor) AS gross, SUM(t.net_czk_minor) AS net, COUNT(*) AS count
+             FROM transactions t
+             JOIN accounts a ON a.id = t.account_id
+             JOIN platforms p ON p.id = a.platform_id
+             WHERE t.occurred_on >= :s AND t.occurred_on < :e
+             GROUP BY p.id
+             ORDER BY gross DESC, p.name",
+            ['s' => $period->from, 'e' => $period->to]
+        );
+
+        return array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'name' => (string) $row['name'],
+            'ai_policy' => (string) $row['ai_policy'],
+            'gross' => (int) $row['gross'],
+            'net' => (int) $row['net'],
+            'count' => (int) $row['count'],
+        ], $rows);
+    }
+
+    /**
+     * Pořadí výdělečných platforem podle ID (1, 2, …) — stálé přiřazení barvy platformě.
+     *
+     * @return array<int, int> [platform_id => pořadí od 1]
+     */
+    public function platformSlots(): array
+    {
+        $ids = array_map('intval', array_column(
+            $this->db->all("SELECT id FROM platforms WHERE role IN ('monetization', 'both') ORDER BY id"),
+            'id'
+        ));
+
+        return $ids === [] ? [] : array_combine($ids, range(1, count($ids)));
+    }
+
     /** @return list<array<string, mixed>> */
     public function byType(string $yearMonth, ?int $modelId = null): array
     {
         [$from, $to] = self::monthRange($yearMonth);
+
+        return $this->rangeByType($from, $to, $modelId);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function byTypeIn(Period $period): array
+    {
+        return $this->rangeByType($period->from, $period->to, null);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function rangeByType(string $from, string $to, ?int $modelId): array
+    {
         $modelFilter = $modelId !== null ? ' AND a.model_id = :m' : '';
 
         return $this->db->all(
-            "SELECT t.type, COALESCE(SUM(t.net_czk_minor), 0) AS net, COUNT(*) AS count
+            "SELECT t.type, COALESCE(SUM(t.net_czk_minor), 0) AS net, COALESCE(SUM(t.gross_czk_minor), 0) AS gross, COUNT(*) AS count
              FROM transactions t JOIN accounts a ON a.id = t.account_id
              WHERE t.occurred_on >= :s AND t.occurred_on < :e{$modelFilter}
              GROUP BY t.type ORDER BY net DESC",
@@ -166,10 +329,27 @@ final class Stats
      */
     public function topFans(?string $yearMonth, int $limit = 10, ?int $modelId = null): array
     {
+        $range = $yearMonth !== null ? self::monthRange($yearMonth) : null;
+
+        return $this->rangeTopFans($range, $limit, $modelId);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function topFansIn(Period $period, int $limit = 10): array
+    {
+        return $this->rangeTopFans([$period->from, $period->to], $limit, null);
+    }
+
+    /**
+     * @param array{0: string, 1: string}|null $range
+     * @return list<array<string, mixed>>
+     */
+    private function rangeTopFans(?array $range, int $limit, ?int $modelId): array
+    {
         $where = [];
         $params = [];
-        if ($yearMonth !== null) {
-            [$params['s'], $params['e']] = self::monthRange($yearMonth);
+        if ($range !== null) {
+            [$params['s'], $params['e']] = $range;
             $where[] = 't.occurred_on >= :s AND t.occurred_on < :e';
         }
         if ($modelId !== null) {
@@ -192,6 +372,104 @@ final class Stats
              LIMIT " . max(1, min(200, $limit)),
             $params
         );
+    }
+
+    /**
+     * Nejvyšší jednotlivé platby v období (hrubě v CZK), při shodě novější dřív.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function largestPayments(Period $period, int $limit = 8): array
+    {
+        return $this->db->all(
+            "SELECT t.id, t.type, t.occurred_at, t.occurred_on, t.gross_czk_minor AS gross, t.net_czk_minor AS net,
+                    f.id AS fan_id, f.handle AS fan_handle, f.display_name AS fan_name, f.is_top_spender,
+                    m.id AS model_id, m.name AS model, p.id AS platform_id, p.name AS platform
+             FROM transactions t
+             JOIN accounts a ON a.id = t.account_id
+             JOIN models m ON m.id = a.model_id
+             JOIN platforms p ON p.id = a.platform_id
+             LEFT JOIN fans f ON f.id = t.fan_id
+             WHERE t.occurred_on >= :s AND t.occurred_on < :e
+             ORDER BY t.gross_czk_minor DESC, t.occurred_at DESC, t.id DESC
+             LIMIT " . max(1, min(100, $limit)),
+            ['s' => $period->from, 'e' => $period->to]
+        );
+    }
+
+    /**
+     * Časová řada období po dnech (u YTD po měsících) do dneška: hrubě, čistě, poplatky, náklady
+     * a čistě podle skupin typů plateb, platforem a modelek.
+     *
+     * @return list<array{start: string, gross: int, net: int, fees: int, costs: int, groups: array<string, int>, platforms: array<int, int>, models: array<int, int>}>
+     */
+    public function series(Period $period): array
+    {
+        $end = $period->dataEnd();
+        $unit = $period->bucketUnit();
+        $buckets = [];
+        $cursor = new DateTimeImmutable($period->from);
+        $last = new DateTimeImmutable($end);
+        while ($cursor < $last) {
+            $key = $unit === 'month' ? $cursor->format('Y-m') : $cursor->format('Y-m-d');
+            $buckets[$key] ??= [
+                'start' => $cursor->format('Y-m-d'),
+                'gross' => 0,
+                'net' => 0,
+                'fees' => 0,
+                'costs' => 0,
+                'groups' => array_fill_keys(array_keys(self::TYPE_GROUPS), 0),
+                'platforms' => [],
+                'models' => [],
+            ];
+            $cursor = $cursor->modify('+1 day');
+        }
+        if ($buckets === []) {
+            return [];
+        }
+        $bucketOf = static fn (string $day): string => $unit === 'month' ? substr($day, 0, 7) : $day;
+        $params = ['s' => $period->from, 'e' => $end];
+
+        $rows = $this->db->all(
+            "SELECT t.occurred_on AS day, t.type, a.platform_id, a.model_id,
+                    SUM(t.gross_czk_minor) AS gross, SUM(t.net_czk_minor) AS net
+             FROM transactions t JOIN accounts a ON a.id = t.account_id
+             WHERE t.occurred_on >= :s AND t.occurred_on < :e
+             GROUP BY t.occurred_on, t.type, a.platform_id, a.model_id",
+            $params
+        );
+        foreach ($rows as $row) {
+            $key = $bucketOf((string) $row['day']);
+            if (!isset($buckets[$key])) {
+                continue;
+            }
+            $gross = (int) $row['gross'];
+            $net = (int) $row['net'];
+            $platformId = (int) $row['platform_id'];
+            $modelId = (int) $row['model_id'];
+            $bucket = &$buckets[$key];
+            $bucket['gross'] += $gross;
+            $bucket['net'] += $net;
+            $bucket['fees'] += $gross - $net;
+            $bucket['groups'][self::typeGroup((string) $row['type'])] += $net;
+            $bucket['platforms'][$platformId] = ($bucket['platforms'][$platformId] ?? 0) + $net;
+            $bucket['models'][$modelId] = ($bucket['models'][$modelId] ?? 0) + $net;
+            unset($bucket);
+        }
+
+        $costs = $this->db->all(
+            'SELECT incurred_on AS day, SUM(amount_czk_minor) AS total FROM costs
+             WHERE incurred_on >= :s AND incurred_on < :e GROUP BY incurred_on',
+            $params
+        );
+        foreach ($costs as $row) {
+            $key = $bucketOf((string) $row['day']);
+            if (isset($buckets[$key])) {
+                $buckets[$key]['costs'] += (int) $row['total'];
+            }
+        }
+
+        return array_values($buckets);
     }
 
     /**
@@ -234,6 +512,19 @@ final class Stats
     public function clicksBySource(string $yearMonth, ?int $modelId = null): array
     {
         [$from, $to] = self::monthRange($yearMonth);
+
+        return $this->rangeClicksBySource($from, $to, $modelId);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function clicksBySourceIn(Period $period): array
+    {
+        return $this->rangeClicksBySource($period->from, $period->to, null);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function rangeClicksBySource(string $from, string $to, ?int $modelId): array
+    {
         $modelFilter = $modelId !== null ? ' AND l.model_id = :m' : '';
 
         return $this->db->all(

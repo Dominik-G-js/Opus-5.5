@@ -4,15 +4,15 @@
 $title ??= $v->appName;
 $user = $v->user();
 $nav = [
-    '' => 'Přehled',
-    '/models' => 'Modelky',
-    '/earnings' => 'Příjmy',
-    '/fans' => 'Fanoušci',
-    '/costs' => 'Náklady',
-    '/links' => 'Odkazy a prokliky',
-    '/tools' => 'AI nástroje',
-    '/platforms' => 'Platformy',
-    '/settings' => 'Nastavení',
+    '' => ['Přehled', 'layout-dashboard'],
+    '/models' => ['Modelky', 'sparkles'],
+    '/earnings' => ['Příjmy', 'wallet'],
+    '/fans' => ['Fanoušci', 'heart'],
+    '/costs' => ['Náklady', 'receipt'],
+    '/links' => ['Odkazy a prokliky', 'link-2'],
+    '/tools' => ['AI nástroje', 'wand-sparkles'],
+    '/platforms' => ['Platformy', 'layers'],
+    '/settings' => ['Nastavení', 'settings'],
 ];
 ?><!doctype html>
 <html lang="cs">
@@ -22,6 +22,7 @@ $nav = [
 <link rel="icon" href="data:,">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
+<meta name="color-scheme" content="light dark">
 <title><?= $v->e($title) ?> · <?= $v->e($v->appName) ?></title>
 <link rel="stylesheet" href="<?= $v->asset('app.css') ?>">
 <script src="<?= $v->asset('app.js') ?>" defer></script>
@@ -29,13 +30,16 @@ $nav = [
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <a class="brand" href="<?= $v->url() ?>"><?= $v->e($v->appName) ?></a>
+    <a class="brand" href="<?= $v->url() ?>">
+      <span class="brand-mark"><?= $v->icon('gem') ?></span>
+      <span class="brand-text"><span class="brand-name"><?= $v->e($v->appName) ?></span><span class="brand-sub">administrace · 18+</span></span>
+    </a>
     <?php if ($user !== null): ?>
     <a class="btn btn-primary btn-add" href="<?= $v->url('/models/new') ?>">+ Přidat AI modelku</a>
     <nav aria-label="Hlavní menu">
       <ul class="nav">
-        <?php foreach ($nav as $path => $label): ?>
-          <li><a href="<?= $v->url($path) ?>"<?= $v->isActive($path) ? ' aria-current="page"' : '' ?>><?= $v->e($label) ?></a></li>
+        <?php foreach ($nav as $path => [$label, $icon]): ?>
+          <li><a href="<?= $v->url($path) ?>"<?= $v->isActive($path) ? ' aria-current="page"' : '' ?>><?= $v->icon($icon) ?><span><?= $v->e($label) ?></span></a></li>
         <?php endforeach; ?>
       </ul>
     </nav>
@@ -43,7 +47,7 @@ $nav = [
       <span class="muted"><?= $v->e($user['username']) ?><?= (int) $user['totp_enabled'] === 1 ? '' : ' · <a href="' . $v->url('/settings') . '#twofactor">zapnout 2FA</a>' ?></span>
       <form method="post" action="<?= $v->url('/logout') ?>" class="inline">
         <?= $v->csrfField() ?>
-        <button type="submit" class="link-btn">Odhlásit</button>
+        <button type="submit" class="link-btn"><?= $v->icon('log-out', 'icon icon-xs') ?>Odhlásit</button>
       </form>
     </div>
     <?php endif; ?>

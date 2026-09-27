@@ -1,5 +1,7 @@
 # Redesign přehledu – Dark Luxury
 
+> Vzhled je přenesený do PHP aplikace (`templates/dashboard.php`, `public/assets/app.css`) se skutečnými daty. Tahle složka zůstává jako předloha.
+
 Prototyp nového přehledu administrace AI Model Studia jako jedna React komponenta
 ([`AdminDashboard.jsx`](AdminDashboard.jsx)). Používá jen core Tailwind třídy (žádné `w-[347px]`),
 `lucide-react`, `recharts` a `framer-motion`, takže jde vložit rovnou do Claude React artefaktu.

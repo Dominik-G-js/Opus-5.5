@@ -6,6 +6,7 @@ namespace App\Kernel;
 
 use App\Security\Csrf;
 use App\Support\Clock;
+use App\Support\Icon;
 use App\Support\Labels;
 use App\Support\Money;
 
@@ -15,7 +16,7 @@ use App\Support\Money;
 final class ViewHelpers
 {
     /** Zvýšit při změně CSS/JS kvůli cache prohlížeče. */
-    private const ASSET_VERSION = '7';
+    private const ASSET_VERSION = '8';
 
     /** @var array<string, mixed> */
     private array $old = [];
@@ -96,6 +97,35 @@ final class ViewHelpers
         $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 
         return $this->e($parsed === false ? $date : $parsed->format('j. n. Y'));
+    }
+
+    /** Ikona Lucide jako inline SVG (statický obsah, bez uživatelských dat). */
+    public function icon(string $name, string $class = 'icon'): string
+    {
+        return Icon::svg($name, $class);
+    }
+
+    /** 12 % / 12,5 % (desetinná čárka, pevná mezera). */
+    public function percent(float $value, int $decimals = 0): string
+    {
+        return $this->e(number_format($value, $decimals, ',', "\u{00A0}") . "\u{00A0}%");
+    }
+
+    /**
+     * Štítek změny oproti srovnávacímu období. $change je poměr (0.12 = +12 %), null = nelze srovnat.
+     * $invert: růst je špatně (náklady); $neutral: bez hodnocení (poplatky).
+     */
+    public function delta(?float $change, bool $invert = false, bool $neutral = false): string
+    {
+        if ($change === null) {
+            return '<span class="delta delta-none">bez srovnání</span>';
+        }
+        $up = $change >= 0;
+        $tone = $neutral ? 'neutral' : (($up xor $invert) ? 'good' : 'bad');
+        $text = ($up ? '+' : '−') . number_format(abs($change) * 100, 1, ',', "\u{00A0}") . "\u{00A0}%";
+
+        return '<span class="delta delta-' . $tone . '">' . Icon::svg($up ? 'arrow-up-right' : 'arrow-down-right', 'icon icon-xs')
+            . $this->e($text) . '</span>';
     }
 
     public function label(string $group, ?string $key): string

@@ -311,6 +311,11 @@ def main():
         check(app.db("SELECT totp_enabled FROM users")[0][0] == 0, "2FA zůstalo vypnuté")
         get("?month=2020-01"); get("?month=abc")
         check("Přehled · 2020-01" in s.get(A + "?month=2020-01").text, "přehled starého měsíce")
+        for query, label in [("?range=7d", "posledních 7 dní"), ("?range=30d", "posledních 30 dní"), ("?range=ytd", "od začátku roku")]:
+            page = get(query).text
+            check(label in page and 'aria-current="page">' in page, f"přehled {query}: období a aktivní přepínač")
+            check(' style="' not in page and "<script>" not in page, f"přehled {query}: bez inline stylů a skriptů (CSP)")
+        check("Přehled · 20" in get("?range=nesmysl").text, "neznámé období → běžící měsíc")
 
         # ---------------------------------------------------------------- 13) chybové stránky
         get("/neexistuje", 404)

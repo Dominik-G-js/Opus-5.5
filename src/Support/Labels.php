@@ -84,6 +84,12 @@ final class Labels
             'giveaway' => 'Giveaway',
             'other' => 'Ostatní',
         ],
+        'tx_group' => [
+            'subscription' => 'Předplatné',
+            'tip' => 'Spropitné',
+            'ppv' => 'Placený obsah (PPV)',
+            'other' => 'Ostatní',
+        ],
         'tx_source' => [
             'manual' => 'Ručně',
             'csv' => 'CSV import',
