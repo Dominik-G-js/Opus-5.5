@@ -165,6 +165,7 @@ bin/console    instalace, uživatelé, synchronizace, úklid
 storage/       databáze, obrázky, logy (mimo web)
 tests/         testy (bez závislostí)
 docs/          rešerše a strategie
+.claude/skills/ skill pro Claude: vymyšlení a ověření jména modelky (/ai-model-naming)
 ```
 
 ## Omezení
