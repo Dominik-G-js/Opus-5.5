@@ -1,0 +1,15 @@
+# Front controller: vše, co není existující soubor, jde do index.php.
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|svg|woff2)$">
+        Header set Cache-Control "public, max-age=604800"
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>
