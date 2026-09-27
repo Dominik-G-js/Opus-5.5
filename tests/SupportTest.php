@@ -110,6 +110,7 @@ test('Router: parametry, doslovné tečky a 404/405', function (): void {
 
 test('Str: slug a náhodný kód', function (): void {
     assertSame('lucie-dvorakova', Str::slug('Lucie Dvořáková'));
+    assertSame('lucie dvorakova, zofia lozinska, strasse', Str::transliterateLatin('Lucie DVOŘÁKOVÁ, Zofia Łozińska, Straße'), 'fallback bez intl');
     assertSame('model', Str::slug('!!!'));
     assertTrue(preg_match('/^[a-z2-9]{7}$/', Str::randomCode(7)) === 1);
 });
