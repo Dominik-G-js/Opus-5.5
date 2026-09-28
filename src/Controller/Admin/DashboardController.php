@@ -9,7 +9,6 @@ use App\Kernel\Request;
 use App\Kernel\Response;
 use App\Service\Period;
 use App\Service\Stats;
-use App\Support\AreaChart;
 use App\Support\Clock;
 use App\Support\ColumnChart;
 use App\Support\DonutChart;
@@ -18,6 +17,7 @@ use App\Support\Money;
 use App\Support\ProgressRing;
 use App\Support\Sparkline;
 use App\Support\SplitBar;
+use App\Support\StackedColumnChart;
 use DateTimeImmutable;
 
 final class DashboardController extends Controller
@@ -27,6 +27,12 @@ final class DashboardController extends Controller
     /** Kolik výdělečných platforem má vlastní barvu; další sdílí neutrální „ostatní“. */
     private const PLATFORM_COLORS = 5;
     private const POLICY_TONE = ['allowed' => 'good', 'restricted' => 'warn', 'banned' => 'bad', 'unknown' => 'neutral'];
+    /** „Koho oslovit“: horních 20 % fanoušků podle celkové útraty, kteří 30+ dní nezaplatili. */
+    private const LAPSED_DAYS = 30;
+    private const LAPSED_TOP_SHARE = 0.2;
+    /** Kolik největších fanoušků sledovat a od jakého podílu na čistých příjmech varovat. */
+    private const TOP_FANS = 3;
+    private const TOP_FANS_WARN = 0.5;
 
     public function index(Request $request): Response
     {
@@ -79,7 +85,10 @@ final class DashboardController extends Controller
             'goal' => $this->goal($stats, $month ?? $currentMonth, $currentMonth, $today),
             'accounts' => array_values(array_filter($stats->byAccountIn($period), static fn (array $a): bool => (int) $a['count'] > 0)),
             'topFans' => $stats->topFansIn($period, 8),
-            'clicks' => $stats->clicksBySourceIn($period),
+            'fanStats' => $this->fanStats($stats, $period, $previous, $summary['net']),
+            'lapsedFans' => $stats->lapsedTopFans($today, self::LAPSED_DAYS, self::LAPSED_TOP_SHARE, 8),
+            'lapsedRule' => ['days' => self::LAPSED_DAYS, 'percent' => (int) round(self::LAPSED_TOP_SHARE * 100)],
+            'clicks' => $this->clicks($stats->clicksBySourceIn($period)),
             'monthly' => $this->monthlyChart($stats->monthlySeries(12)),
             'syncErrors' => $this->app->db->all(
                 "SELECT a.id, a.handle, a.last_sync_error, p.name AS platform FROM accounts a
@@ -95,6 +104,12 @@ final class DashboardController extends Controller
         return $previous > 0 ? ($current - $previous) / $previous : null;
     }
 
+    /** Podíl největších fanoušků na čistých příjmech období (max. 100 %), null když nejde spočítat. */
+    public static function topShare(int $topNet, int $periodNet): ?float
+    {
+        return $topNet > 0 && $periodNet > 0 ? min(1.0, $topNet / $periodNet) : null;
+    }
+
     /** @param array<int, int> $slots */
     public static function platformKey(int $platformId, array $slots): string
     {
@@ -104,7 +119,8 @@ final class DashboardController extends Controller
     }
 
     /**
-     * Plošný graf čistých příjmů podle skupin typů plateb + data pro bohatý tooltip.
+     * Skládaný sloupcový graf čistých příjmů podle skupin typů plateb (po dnech, u YTD po týdnech)
+     * + data pro bohatý tooltip a tabulku.
      *
      * @param list<array<string, mixed>> $series
      * @param array<int, int> $slots
@@ -116,16 +132,13 @@ final class DashboardController extends Controller
         $labels = [];
         $titles = [];
         $points = [];
+        $weekly = $period->bucketUnit() === 'week';
         foreach ($series as $bucket) {
             $date = new DateTimeImmutable($bucket['start']);
-            $monthIndex = (int) $date->format('n') - 1;
-            if ($period->bucketUnit() === 'month') {
-                $labels[] = self::MONTH_NAMES[$monthIndex];
-                $heading = Period::monthName($date->format('Y-m'));
-            } else {
-                $labels[] = $date->format('j. n.');
-                $heading = self::WEEKDAYS[(int) $date->format('w')] . ' ' . $date->format('j. n. Y');
-            }
+            $labels[] = $date->format('j. n.');
+            $heading = $weekly
+                ? 'Týden ' . self::dayRange($date, new DateTimeImmutable($bucket['end']))
+                : self::WEEKDAYS[(int) $date->format('w')] . ' ' . $date->format('j. n. Y');
             $groups = [];
             foreach ($bucket['groups'] as $group => $net) {
                 $groups[] = ['key' => 'g-' . $group, 'label' => Labels::get('tx_group', $group), 'net' => $net];
@@ -163,9 +176,28 @@ final class DashboardController extends Controller
         }
 
         return [
-            'svg' => AreaChart::render($labels, $chartSeries, $titles, 'Čisté příjmy podle typu plateb, ' . $period->label(), 'rev'),
+            'svg' => StackedColumnChart::render(
+                $labels,
+                $chartSeries,
+                $titles,
+                'Čisté příjmy podle typu plateb ' . ($weekly ? 'po týdnech' : 'po dnech') . ', ' . $period->label(),
+                'rev'
+            ),
             'points' => $points,
         ];
+    }
+
+    /** „5.–11. 1. 2026“, přes hranici měsíce „26. 1. – 1. 2. 2026“, jeden den „4. 1. 2026“. */
+    public static function dayRange(DateTimeImmutable $start, DateTimeImmutable $end): string
+    {
+        if ($start->format('Y-m-d') === $end->format('Y-m-d')) {
+            return $start->format('j. n. Y');
+        }
+        if ($start->format('Y-m') === $end->format('Y-m')) {
+            return $start->format('j.') . "\u{2013}" . $end->format('j. n. Y');
+        }
+
+        return $start->format('j. n.') . " \u{2013} " . $end->format('j. n. Y');
     }
 
     /**
@@ -276,6 +308,58 @@ final class DashboardController extends Controller
         }
 
         return $cards;
+    }
+
+    /**
+     * Prokliky podle zdroje s podílem na všech proklicích období a pruhem (SVG, bez inline stylů).
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array{source: string, clicks: int, share: float, bar: string}>
+     */
+    private function clicks(array $rows): array
+    {
+        $total = array_sum(array_map(static fn (array $r): int => (int) $r['clicks'], $rows));
+        $items = [];
+        foreach ($rows as $row) {
+            $clicks = (int) $row['clicks'];
+            $share = $total > 0 ? $clicks / $total : 0.0;
+            $label = Labels::get('link_source', (string) $row['source']);
+            $percent = number_format($share * 100, 0, ',', "\u{00A0}") . "\u{00A0}%";
+            $items[] = [
+                'source' => (string) $row['source'],
+                'clicks' => $clicks,
+                'share' => $share,
+                'bar' => SplitBar::render([
+                    ['key' => 'share', 'value' => $clicks, 'title' => $label . ': ' . $percent . ' prokliků'],
+                    ['key' => 'rest', 'value' => $total - $clicks, 'title' => 'ostatní zdroje'],
+                ], $label . ': ' . $percent . ' všech prokliků'),
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * Platící fanoušci a průměrná útrata za období (se změnou oproti srovnávacímu období)
+     * a podíl největších fanoušků na čistých příjmech.
+     *
+     * @return array<string, mixed>
+     */
+    private function fanStats(Stats $stats, Period $period, Period $previous, int $periodNet): array
+    {
+        $current = $stats->fanConcentration($period, self::TOP_FANS);
+        $before = $stats->fanConcentration($previous, self::TOP_FANS);
+        $share = self::topShare($current['top_net'], $periodNet);
+
+        return [
+            'paying' => $current['paying'],
+            'payingDelta' => self::growth($current['paying'], $before['paying']),
+            'average' => $current['average'],
+            'averageDelta' => $current['average'] === null ? null : self::growth($current['average'], (int) $before['average']),
+            'topCount' => $current['top_count'],
+            'topShare' => $share,
+            'topWarn' => $share !== null && $share > self::TOP_FANS_WARN,
+        ];
     }
 
     /** @return array<string, mixed> */

@@ -104,10 +104,10 @@ final class Period
         return min($this->to, max($this->from, $tomorrow));
     }
 
-    /** Jednotka bodů grafu: dny, u YTD měsíce. */
+    /** Jednotka sloupců grafu: dny, u YTD týdny (pondělí–neděle). */
     public function bucketUnit(): string
     {
-        return $this->kind === 'ytd' ? 'month' : 'day';
+        return $this->kind === 'ytd' ? 'week' : 'day';
     }
 
     public function isCurrentMonth(): bool

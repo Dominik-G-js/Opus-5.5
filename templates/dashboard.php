@@ -11,7 +11,15 @@
 /** @var list<array<string, mixed>> $payments */
 /** @var array<string, mixed> $goal */
 /** @var array<string, mixed> $monthly */
+/** @var array<string, mixed> $fanStats */
+/** @var list<array<string, mixed>> $lapsedFans */
 $isMonth = $period->kind === 'month';
+$mobileRows = 5; // na mobilu se dlouhé tabulky zkrátí, zbytek je za odkazem
+// Jméno fanouška a odznak „top“ na jednom řádku; dlouhé jméno se zkrátí výpustkou, celé je v title.
+$fanCell = static function (int $id, string $name, bool $top) use ($v): string {
+    return '<span class="fan-cell' . ($top ? ' is-top' : '') . '"><a class="fan-name" href="' . $v->url('/fans/' . $id) . '" title="' . $v->e($name) . '">' . $v->e($name) . '</a>'
+        . ($top ? '<span class="badge badge-warn">' . $v->icon('crown', 'icon icon-xs') . 'top</span>' : '') . '</span>';
+};
 $ranges = ['7d' => '7 dní', '30d' => '30 dní', 'ytd' => 'Od začátku roku'];
 $roi = $summary['costs'] > 0 ? $summary['profit'] / $summary['costs'] * 100 : null;
 $groupIcons = ['subscription' => 'crown', 'tip' => 'gift', 'ppv' => 'message-square-lock', 'other' => 'coins'];
@@ -311,16 +319,16 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
         <table class="table-lux">
           <thead><tr><th>Fanoušek</th><th>Modelka</th><th>Platforma</th><th>Typ</th><th>Datum</th><th class="num">Hrubě</th></tr></thead>
           <tbody>
-          <?php foreach ($payments as $payment): ?>
-            <tr>
+          <?php foreach ($payments as $i => $payment): ?>
+            <tr<?= $i >= $mobileRows ? ' class="is-extra"' : '' ?>>
               <td>
                 <?php if ($payment['fan_id'] !== null): ?>
-                  <a href="<?= $v->url('/fans/' . $payment['fan_id']) ?>"><?= $v->e($payment['fan_name'] ?? $payment['fan_handle'] ?? '—') ?></a><?= (int) $payment['is_top_spender'] === 1 ? ' <span class="badge badge-warn">' . $v->icon('crown', 'icon icon-xs') . 'top</span>' : '' ?>
+                  <?= $fanCell((int) $payment['fan_id'], (string) ($payment['fan_name'] ?? $payment['fan_handle'] ?? '—'), (int) $payment['is_top_spender'] === 1) ?>
                 <?php else: ?>
                   <span class="muted">—</span>
                 <?php endif; ?>
               </td>
-              <td class="nowrap"><?= $v->e($payment['model']) ?></td>
+              <td><span class="cell-clip" title="<?= $v->e($payment['model']) ?>"><span><?= $v->e($payment['model']) ?></span></span></td>
               <td><span class="chip"><span class="dot fill-bg-<?= $v->e($payment['key']) ?>"></span><?= $v->e($payment['platform']) ?></span></td>
               <td><?= $v->label('tx_type', $payment['type']) ?></td>
               <td class="nowrap"><?= $v->date($payment['occurred_on']) ?></td>
@@ -330,6 +338,9 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
           </tbody>
         </table>
       </div>
+      <?php if (count($payments) > $mobileRows): ?>
+        <p class="table-more card-pad"><a href="<?= $v->url('/earnings', $isMonth ? ['month' => (string) $period->month] : []) ?>">Zobrazit všechny platby</a></p>
+      <?php endif; ?>
     <?php endif; ?>
   </section>
 
@@ -376,15 +387,33 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
       </div>
       <a class="small" href="<?= $v->url('/fans', $isMonth ? ['month' => (string) $period->month] : []) ?>">Všichni</a>
     </div>
+    <div class="fan-stats card-pad">
+      <dl class="mini-kpis">
+        <div>
+          <dt>Platících fanoušků</dt>
+          <dd><strong><?= (int) $fanStats['paying'] ?></strong> <?= $v->delta($fanStats['payingDelta']) ?></dd>
+        </div>
+        <div>
+          <dt>Průměr na platícího</dt>
+          <dd><strong><?= $fanStats['average'] === null ? '—' : $v->money($fanStats['average']) ?></strong> <?= $v->delta($fanStats['averageDelta']) ?></dd>
+        </div>
+      </dl>
+      <?php if ($fanStats['topShare'] !== null): ?>
+        <p class="dependence<?= $fanStats['topWarn'] ? ' is-warn' : '' ?>">
+          <?= $v->icon($fanStats['topWarn'] ? 'triangle-alert' : 'users', 'icon icon-sm') ?>
+          <span><strong><?= $fanStats['topCount'] === 1 ? 'Největší fanoušek' : (int) $fanStats['topCount'] . ' největší fanoušci' ?> = <?= $v->percent($fanStats['topShare'] * 100) ?></strong> čistých příjmů za období<?= $fanStats['topWarn'] ? '. Příjmy stojí na pár lidech — oslovuj i ostatní.' : '' ?></span>
+        </p>
+      <?php endif; ?>
+    </div>
     <?php if ($topFans === []): ?>
       <p class="empty card-pad">Zatím žádné platby s přiřazeným fanouškem.</p>
     <?php else: ?>
       <div class="table-wrap"><table class="table-lux">
         <thead><tr><th>Fanoušek</th><th>Modelka</th><th class="num">Plateb</th><th class="num">Čistě</th></tr></thead>
         <tbody>
-        <?php foreach ($topFans as $fan): ?>
-          <tr>
-            <td><a href="<?= $v->url('/fans/' . $fan['id']) ?>"><?= $v->e($fan['display_name'] ?? $fan['handle'] ?? '—') ?></a><?= (int) $fan['is_top_spender'] === 1 ? ' <span class="badge badge-warn">' . $v->icon('crown', 'icon icon-xs') . 'top</span>' : '' ?></td>
+        <?php foreach ($topFans as $i => $fan): ?>
+          <tr<?= $i >= $mobileRows ? ' class="is-extra"' : '' ?>>
+            <td><?= $fanCell((int) $fan['id'], (string) ($fan['display_name'] ?? $fan['handle'] ?? '—'), (int) $fan['is_top_spender'] === 1) ?></td>
             <td><?= $v->e($fan['model']) ?> <span class="muted small"><?= $v->e($fan['platform']) ?></span></td>
             <td class="num"><?= (int) $fan['payments'] ?></td>
             <td class="num"><?= $v->money((int) $fan['net']) ?></td>
@@ -392,6 +421,9 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
         <?php endforeach; ?>
         </tbody>
       </table></div>
+      <?php if (count($topFans) > $mobileRows): ?>
+        <p class="table-more card-pad"><a href="<?= $v->url('/fans', $isMonth ? ['month' => (string) $period->month] : []) ?>">Zobrazit všechny fanoušky</a></p>
+      <?php endif; ?>
     <?php endif; ?>
   </section>
 
@@ -427,6 +459,35 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
     </details>
   </section>
 </div>
+
+<section class="card card-flush" aria-labelledby="winback-title">
+  <div class="card-head card-pad">
+    <div>
+      <p class="eyebrow">Fanoušci · k dnešku</p>
+      <h2 id="winback-title">Koho oslovit</h2>
+    </div>
+    <a class="small" href="<?= $v->url('/fans') ?>">Všichni fanoušci</a>
+  </div>
+  <p class="card-intro card-pad small muted">Největší fanoušci (horních <?= (int) $lapsedRule['percent'] ?> % podle celkové útraty), kteří <?= (int) $lapsedRule['days'] ?> a více dní nic nezaplatili. Poznámky pro chat najdeš na profilu fanouška.</p>
+  <?php if ($lapsedFans === []): ?>
+    <p class="empty card-pad">Nikdo z největších fanoušků se neodmlčel.</p>
+  <?php else: ?>
+    <div class="table-wrap"><table class="table-lux">
+      <thead><tr><th>Fanoušek</th><th>Modelka</th><th class="num">Celkem utratil</th><th>Poslední platba</th><th class="num">Bez platby</th></tr></thead>
+      <tbody>
+      <?php foreach ($lapsedFans as $fan): ?>
+        <tr>
+          <td><?= $fanCell($fan['id'], $fan['name'], $fan['is_top_spender'] === 1) ?></td>
+          <td><?= $v->e($fan['model']) ?> <span class="muted small"><?= $v->e($fan['platform']) ?></span></td>
+          <td class="num"><strong><?= $v->money($fan['net']) ?></strong></td>
+          <td class="nowrap"><?= $v->date($fan['last_payment']) ?></td>
+          <td class="num"><?= (int) $fan['days'] ?> dní</td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php endif; ?>
+</section>
 
 <div class="grid grid-2">
   <section class="card card-flush" aria-labelledby="accounts-title">
@@ -466,10 +527,14 @@ $basisLabel = $goal['basis'] === 'net' ? 'příjmy po poplatcích' : 'čistý zi
       <p class="empty card-pad">Žádné prokliky. Vytvoř <a href="<?= $v->url('/links/new') ?>">sledovací odkaz</a> do bia.</p>
     <?php else: ?>
       <div class="table-wrap"><table class="table-lux">
-        <thead><tr><th>Zdroj</th><th class="num">Prokliky</th></tr></thead>
+        <thead><tr><th>Zdroj</th><th>Podíl</th><th class="num">Prokliky</th></tr></thead>
         <tbody>
         <?php foreach ($clicks as $click): ?>
-          <tr><td><?= $v->icon('mouse-pointer-click', 'icon icon-xs muted') ?> <?= $v->label('link_source', $click['source']) ?></td><td class="num"><?= (int) $click['clicks'] ?></td></tr>
+          <tr>
+            <td class="nowrap"><?= $v->icon('mouse-pointer-click', 'icon icon-xs muted') ?> <?= $v->label('link_source', $click['source']) ?></td>
+            <td class="share-cell"><span class="share"><?= $click['bar'] ?><span class="share-pct"><?= $v->percent($click['share'] * 100) ?></span></span></td>
+            <td class="num"><?= (int) $click['clicks'] ?></td>
+          </tr>
         <?php endforeach; ?>
         </tbody>
       </table></div>

@@ -172,6 +172,7 @@
   'use strict';
 
   var active = null;
+  var activeTarget = null;
   var tips = document.querySelectorAll('.viz-tip');
   if (tips.length === 0) {
     return;
@@ -203,6 +204,7 @@
     }
     tip.hidden = false;
     active = tip;
+    activeTarget = target;
     place(tip, x, y);
   }
 
@@ -210,7 +212,13 @@
     if (active) {
       active.hidden = true;
       active = null;
+      activeTarget = null;
     }
+  }
+
+  function showAtTarget(target) {
+    var rect = target.getBoundingClientRect();
+    show(target, rect.left + rect.width / 2, rect.top + rect.height / 2);
   }
 
   function onPointer(event) {
@@ -226,8 +234,7 @@
   document.addEventListener('focusin', function (event) {
     var target = event.target.closest && event.target.closest('[data-tip]');
     if (target) {
-      var rect = target.getBoundingClientRect();
-      show(target, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      showAtTarget(target);
     }
   });
   document.addEventListener('focusout', hide);
@@ -236,5 +243,18 @@
       hide();
     }
   });
-  window.addEventListener('scroll', hide, { passive: true });
+  // Posun stránky: tooltip u myši zmizí; u prvku s fokusem (klávesnice — fokus sám stránku posune)
+  // zůstane a jde s prvkem, dokud je prvek vidět.
+  window.addEventListener('scroll', function () {
+    if (!active || activeTarget !== document.activeElement) {
+      hide();
+      return;
+    }
+    var rect = activeTarget.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      hide();
+    } else {
+      showAtTarget(activeTarget);
+    }
+  }, { passive: true });
 })();

@@ -375,6 +375,89 @@ final class Stats
     }
 
     /**
+     * „Koho oslovit“: fanoušci z horních $topShare všech platících fanoušků podle celkové čisté útraty
+     * (za celou dobu do $today), kteří aspoň $inactiveDays dní nic nezaplatili. Seřazeno podle útraty.
+     *
+     * @return list<array{id: int, name: string, handle: string|null, is_top_spender: int, model_id: int, model: string, platform: string, net: int, payments: int, last_payment: string, days: int}>
+     */
+    public function lapsedTopFans(string $today, int $inactiveDays = 30, float $topShare = 0.2, int $limit = 8): array
+    {
+        if ($inactiveDays < 1 || $topShare <= 0 || $topShare > 1 || $limit < 1) {
+            throw new \InvalidArgumentException('Neplatné parametry výběru fanoušků.');
+        }
+        // Platby s datem v budoucnu (překlep) se nepočítají — jinak by fanouška nesmyslně držely „aktivního“.
+        $fans = $this->db->all(
+            'SELECT f.id, f.handle, f.display_name, f.is_top_spender, m.id AS model_id, m.name AS model, p.name AS platform,
+                    SUM(t.net_czk_minor) AS net, COUNT(t.id) AS payments, MAX(t.occurred_on) AS last_payment
+             FROM transactions t
+             JOIN fans f ON f.id = t.fan_id
+             JOIN accounts a ON a.id = f.account_id
+             JOIN models m ON m.id = a.model_id
+             JOIN platforms p ON p.id = a.platform_id
+             WHERE t.occurred_on <= :today
+             GROUP BY f.id
+             HAVING SUM(t.net_czk_minor) > 0
+             ORDER BY net DESC, last_payment DESC, f.id',
+            ['today' => $today]
+        );
+        $top = array_slice($fans, 0, (int) max(1, ceil(count($fans) * $topShare)));
+        $todayDate = new DateTimeImmutable($today);
+        $lapsed = [];
+        foreach ($top as $fan) {
+            $days = (int) (new DateTimeImmutable((string) $fan['last_payment']))->diff($todayDate)->days;
+            if ($days < $inactiveDays) {
+                continue;
+            }
+            $lapsed[] = [
+                'id' => (int) $fan['id'],
+                'name' => (string) ($fan['display_name'] ?? $fan['handle'] ?? '—'),
+                'handle' => $fan['handle'],
+                'is_top_spender' => (int) $fan['is_top_spender'],
+                'model_id' => (int) $fan['model_id'],
+                'model' => (string) $fan['model'],
+                'platform' => (string) $fan['platform'],
+                'net' => (int) $fan['net'],
+                'payments' => (int) $fan['payments'],
+                'last_payment' => (string) $fan['last_payment'],
+                'days' => $days,
+            ];
+            if (count($lapsed) === $limit) {
+                break;
+            }
+        }
+
+        return $lapsed;
+    }
+
+    /**
+     * Závislost na největších fanoušcích za období: kolik fanoušků platilo (čistě > 0), kolik utratili,
+     * průměr na platícího fanouška a součet $top největších. Platby bez přiřazeného fanouška se nepočítají.
+     *
+     * @return array{paying: int, fan_net: int, average: int|null, top_count: int, top_net: int}
+     */
+    public function fanConcentration(Period $period, int $top = 3): array
+    {
+        $nets = array_map('intval', array_column($this->db->all(
+            'SELECT SUM(net_czk_minor) AS net FROM transactions
+             WHERE fan_id IS NOT NULL AND occurred_on >= :s AND occurred_on < :e
+             GROUP BY fan_id HAVING SUM(net_czk_minor) > 0
+             ORDER BY net DESC',
+            ['s' => $period->from, 'e' => $period->to]
+        ), 'net'));
+        $paying = count($nets);
+        $fanNet = array_sum($nets);
+        $topNets = array_slice($nets, 0, max(1, $top));
+
+        return [
+            'paying' => $paying,
+            'fan_net' => $fanNet,
+            'average' => $paying > 0 ? (int) round($fanNet / $paying) : null,
+            'top_count' => count($topNets),
+            'top_net' => array_sum($topNets),
+        ];
+    }
+
+    /**
      * Nejvyšší jednotlivé platby v období (hrubě v CZK), při shodě novější dřív.
      *
      * @return list<array<string, mixed>>
@@ -398,10 +481,11 @@ final class Stats
     }
 
     /**
-     * Časová řada období po dnech (u YTD po měsících) do dneška: hrubě, čistě, poplatky, náklady
-     * a čistě podle skupin typů plateb, platforem a modelek.
+     * Časová řada období po dnech (u YTD po týdnech) do dneška: hrubě, čistě, poplatky, náklady
+     * a čistě podle skupin typů plateb, platforem a modelek. Týden začíná pondělím; první a poslední
+     * týden mohou být kratší (start/end jsou skutečné hranice v rámci období, end včetně).
      *
-     * @return list<array{start: string, gross: int, net: int, fees: int, costs: int, groups: array<string, int>, platforms: array<int, int>, models: array<int, int>}>
+     * @return list<array{start: string, end: string, gross: int, net: int, fees: int, costs: int, groups: array<string, int>, platforms: array<int, int>, models: array<int, int>}>
      */
     public function series(Period $period): array
     {
@@ -411,9 +495,11 @@ final class Stats
         $cursor = new DateTimeImmutable($period->from);
         $last = new DateTimeImmutable($end);
         while ($cursor < $last) {
-            $key = $unit === 'month' ? $cursor->format('Y-m') : $cursor->format('Y-m-d');
+            $day = $cursor->format('Y-m-d');
+            $key = self::bucketKey($day, $unit);
             $buckets[$key] ??= [
-                'start' => $cursor->format('Y-m-d'),
+                'start' => $day,
+                'end' => $day,
                 'gross' => 0,
                 'net' => 0,
                 'fees' => 0,
@@ -422,12 +508,13 @@ final class Stats
                 'platforms' => [],
                 'models' => [],
             ];
+            $buckets[$key]['end'] = $day;
             $cursor = $cursor->modify('+1 day');
         }
         if ($buckets === []) {
             return [];
         }
-        $bucketOf = static fn (string $day): string => $unit === 'month' ? substr($day, 0, 7) : $day;
+        $bucketOf = static fn (string $day): string => self::bucketKey($day, $unit);
         $params = ['s' => $period->from, 'e' => $end];
 
         $rows = $this->db->all(
@@ -470,6 +557,17 @@ final class Stats
         }
 
         return array_values($buckets);
+    }
+
+    /** Klíč sloupce: den, nebo pondělí jeho týdne. */
+    private static function bucketKey(string $day, string $unit): string
+    {
+        if ($unit !== 'week') {
+            return $day;
+        }
+        $date = new DateTimeImmutable($day);
+
+        return $date->modify('-' . ((int) $date->format('N') - 1) . ' days')->format('Y-m-d');
     }
 
     /**

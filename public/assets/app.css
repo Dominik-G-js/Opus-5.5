@@ -57,7 +57,7 @@
   --t-subscription: #7c3aed;
   --t-tip: #db2777;
   --t-ppv: #0284c7;
-  --t-other: #64748b;
+  --t-other: #78716c; /* teplá šedá: ve skládaném sloupci se nesmí plést s modrým PPV */
   --p1: #c026d3;
   --p2: #ea580c;
   --p3: #2563eb;
@@ -422,7 +422,7 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 /* Grafy: společné */
 .chart { width: 100%; height: auto; display: block; }
 .chart-scroll { overflow-x: auto; margin: 0 -.25rem; padding: 0 .25rem; }
-.chart-area { min-width: 560px; }
+.chart-stack { min-width: 560px; }
 .chart-scroll-narrow .chart { min-width: 420px; }
 .chart-grid { stroke: var(--grid); stroke-width: 1; }
 .chart-baseline { stroke: var(--axis); stroke-width: 1; }
@@ -441,10 +441,10 @@ details.table-view .table-wrap { margin-top: .5rem; max-height: 22rem; overflow:
 details.table-view th { position: sticky; top: 0; background: var(--surface-solid); }
 
 /* Barvy řad: SVG výplň/tah/gradient a HTML pozadí (legendy, tečky) */
-.fill-g-subscription { fill: var(--t-subscription); } .stroke-g-subscription { stroke: var(--t-subscription); } .stop-g-subscription { stop-color: var(--t-subscription); } .fill-bg-g-subscription { background: var(--t-subscription); }
-.fill-g-tip { fill: var(--t-tip); } .stroke-g-tip { stroke: var(--t-tip); } .stop-g-tip { stop-color: var(--t-tip); } .fill-bg-g-tip { background: var(--t-tip); }
-.fill-g-ppv { fill: var(--t-ppv); } .stroke-g-ppv { stroke: var(--t-ppv); } .stop-g-ppv { stop-color: var(--t-ppv); } .fill-bg-g-ppv { background: var(--t-ppv); }
-.fill-g-other { fill: var(--t-other); } .stroke-g-other { stroke: var(--t-other); } .stop-g-other { stop-color: var(--t-other); } .fill-bg-g-other { background: var(--t-other); }
+.fill-g-subscription { fill: var(--t-subscription); } .fill-bg-g-subscription { background: var(--t-subscription); }
+.fill-g-tip { fill: var(--t-tip); } .fill-bg-g-tip { background: var(--t-tip); }
+.fill-g-ppv { fill: var(--t-ppv); } .fill-bg-g-ppv { background: var(--t-ppv); }
+.fill-g-other { fill: var(--t-other); } .fill-bg-g-other { background: var(--t-other); }
 .fill-p0 { fill: var(--p0); } .stroke-p0 { stroke: var(--p0); } .fill-bg-p0 { background: var(--p0); }
 .fill-p1 { fill: var(--p1); } .stroke-p1 { stroke: var(--p1); } .fill-bg-p1 { background: var(--p1); }
 .fill-p2 { fill: var(--p2); } .stroke-p2 { stroke: var(--p2); } .fill-bg-p2 { background: var(--p2); }
@@ -457,13 +457,9 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
 .fill-kpi-costs { fill: var(--k-costs); } .stroke-kpi-costs { stroke: var(--k-costs); }
 .fill-kpi-profit { fill: var(--k-profit); } .stroke-kpi-profit { stroke: var(--k-profit); }
 
-/* Plošný graf */
-.area-line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.area-guide { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0; }
-.area-dot { fill: var(--surface-solid); stroke-width: 2; opacity: 0; }
-.area-col { outline: none; }
-.area-col:hover .area-guide, .area-col:focus-visible .area-guide, .area-col:hover .area-dot, .area-col:focus-visible .area-dot { opacity: 1; }
-.area-col:focus-visible .chart-hit { fill: var(--surface-2); }
+/* Skládaný sloupcový graf: sloupec (celé pásmo) je cíl pro hover i klávesnici */
+.stack-col { outline: none; cursor: default; }
+.stack-col:focus-visible .chart-hit { stroke: var(--accent); stroke-width: 1.5; }
 
 /* Tooltip grafu (pozici nastavuje app.js přes CSSOM) */
 .viz-tip {
@@ -539,7 +535,19 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
 .kpi-value { margin: .3rem 0 .35rem; font-size: 1.6rem; font-weight: 800; letter-spacing: -.025em; font-variant-numeric: tabular-nums; overflow-wrap: normal; }
 .kpi-note { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0; font-size: .78rem; color: var(--muted); }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .kpi-grid { grid-template-columns: 1fr; } }
+/* Mobil: KPI zůstanou 2×2 (menší písmo, nižší sparkline, bez ikony), přepínač období na jednom řádku. */
+@media (max-width: 560px) {
+  .kpi-grid { gap: .75rem; }
+  .kpi-grid > .kpi { padding: .85rem .9rem; }
+  .kpi-icon { display: none; }
+  .kpi-head .eyebrow { margin: 0; }
+  .kpi-value { margin: .25rem 0 .3rem; font-size: 1.2rem; }
+  .kpi-note { font-size: .74rem; }
+  .kpi .sparkline { height: 24px; margin-top: .45rem; }
+  .period-bar { gap: .6rem; }
+  .segmented { display: flex; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .segmented a { flex: 1 0 auto; padding: .42rem .55rem; text-align: center; }
+}
 
 .dash-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.25rem; margin-bottom: 1.25rem; align-items: start; }
 .dash-grid > .card { margin-bottom: 0; }
@@ -595,6 +603,49 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
 .model-stats strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .model-stats .pos { color: var(--good); }
 .model-stats .neg { color: var(--bad); }
+
+/* Jméno v tabulce na jeden řádek, dlouhé s výpustkou (celé v title); u fanouška i s odznakem „top“.
+   Mřížka se stopou minmax(0, max-content) dává sloupci min. šířku z min-width a max. celé jméno:
+   tabulka jméno zkrátí, jen když se jinak nevejde, a nepřeteče kvůli němu. */
+.fan-cell, .cell-clip { display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; justify-content: start; align-items: center; vertical-align: top; white-space: nowrap; text-wrap: nowrap; }
+.fan-cell { column-gap: .35rem; min-width: 4rem; max-width: 15rem; }
+.fan-cell.is-top { min-width: 8rem; }
+.cell-clip { min-width: 4rem; max-width: 11rem; }
+.fan-name, .cell-clip > span { overflow: hidden; text-overflow: ellipsis; }
+/* Úzká karta: tabulka se posouvá do strany, jména můžou být delší. */
+@container (max-width: 34rem) {
+  .fan-cell { min-width: 8rem; }
+  .fan-cell.is-top { min-width: 11rem; }
+  .cell-clip { min-width: 6rem; }
+}
+
+/* Dlouhé tabulky na mobilu: jen prvních pár řádků, zbytek za odkazem. */
+.table-more { display: none; margin: 0; border-top: 1px solid var(--grid); font-size: .85rem; font-weight: 600; }
+@media (max-width: 560px) {
+  .table-lux tr.is-extra { display: none; }
+  .table-more { display: block; }
+}
+
+/* Platící fanoušci, průměr a závislost na největších */
+.fan-stats { display: grid; gap: .65rem; padding-top: 0; }
+.mini-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: 0; }
+.mini-kpis > div { padding: .6rem .8rem; border-radius: 13px; background: var(--surface-2); border: 1px solid var(--border); }
+.mini-kpis dt { font-size: .74rem; color: var(--muted); }
+.mini-kpis dd { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .45rem; margin: .15rem 0 0; }
+.mini-kpis dd strong { font-size: 1.15rem; font-weight: 800; }
+.dependence { display: flex; gap: .5rem; align-items: flex-start; margin: 0; padding: .6rem .8rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-2); font-size: .86rem; }
+.dependence .icon { flex: none; margin-top: .15rem; color: var(--muted); }
+.dependence strong { color: var(--ink); }
+.dependence.is-warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 30%, transparent); color: var(--warn); }
+.dependence.is-warn .icon, .dependence.is-warn strong { color: var(--warn); }
+.card-intro { margin: 0; padding-top: 0; }
+
+/* Prokliky: podíl zdroje jako pruh + procenta (pruh se v úzké kartě zkrátí, tabulka nepřeteče) */
+.share-cell { width: 45%; }
+.share { display: flex; align-items: center; gap: .5rem; }
+.share .splitbar { flex: 1 1 auto; min-width: 1.5rem; }
+.share-pct { flex: none; min-width: 2.6rem; text-align: right; font-size: .82rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fill-share { fill: var(--accent); }
 
 .goal { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; }
 .ring-wrap { position: relative; flex: none; }
@@ -735,7 +786,7 @@ details.table-view th { position: sticky; top: 0; background: var(--surface-soli
   .btn-primary, .btn-danger-solid, .segmented a[aria-current="page"], .nav a[aria-current="page"] { border: 1px solid CanvasText; }
   .card, .stat, .drawer, .confirm-dialog, .viz-tip, .delta, .badge, .chip { border-color: CanvasText; }
   .hero-value { background: none; color: CanvasText; }
-  .area-col:focus-visible .area-guide { stroke: Highlight; }
+  .stack-col:focus-visible .chart-hit { stroke: Highlight; }
 }
 
 /* Omezený pohyb: bez posunů a zvětšení, zůstanou jen okamžité změny. */

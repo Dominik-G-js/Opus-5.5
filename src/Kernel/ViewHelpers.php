@@ -16,7 +16,7 @@ use App\Support\Money;
 final class ViewHelpers
 {
     /** Zvýšit při změně CSS/JS kvůli cache prohlížeče. */
-    private const ASSET_VERSION = '9';
+    private const ASSET_VERSION = '10';
 
     /** @var array<string, mixed> */
     private array $old = [];
@@ -114,15 +114,20 @@ final class ViewHelpers
     /**
      * Štítek změny oproti srovnávacímu období. $change je poměr (0.12 = +12 %), null = nelze srovnat.
      * $invert: růst je špatně (náklady); $neutral: bez hodnocení (poplatky).
+     * Změna, která po zaokrouhlení na 0,1 % vyjde nulová, je neutrální: šedě, bez šipky, „0,0 %“.
      */
     public function delta(?float $change, bool $invert = false, bool $neutral = false): string
     {
         if ($change === null) {
             return '<span class="delta delta-none">bez srovnání</span>';
         }
-        $up = $change >= 0;
+        $percent = round($change * 100, 1);
+        if ($percent == 0) { // i −0,0
+            return '<span class="delta delta-neutral">' . $this->e("0,0\u{00A0}%") . '</span>';
+        }
+        $up = $percent > 0;
         $tone = $neutral ? 'neutral' : (($up xor $invert) ? 'good' : 'bad');
-        $text = ($up ? '+' : '−') . number_format(abs($change) * 100, 1, ',', "\u{00A0}") . "\u{00A0}%";
+        $text = ($up ? '+' : '−') . number_format(abs($percent), 1, ',', "\u{00A0}") . "\u{00A0}%";
 
         return '<span class="delta delta-' . $tone . '">' . Icon::svg($up ? 'arrow-up-right' : 'arrow-down-right', 'icon icon-xs')
             . $this->e($text) . '</span>';

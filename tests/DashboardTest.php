@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Controller\Admin\DashboardController;
 use App\Service\Period;
 use App\Service\Stats;
-use App\Support\AreaChart;
 use App\Support\ChartScale;
 use App\Support\Clock;
 use App\Support\DonutChart;
@@ -13,6 +12,7 @@ use App\Support\Icon;
 use App\Support\ProgressRing;
 use App\Support\Sparkline;
 use App\Support\SplitBar;
+use App\Support\StackedColumnChart;
 
 /** Platba přímo do DB (CZK, bez přepočtu), vrátí ID. */
 function insertPayment(App\Database\Database $db, int $accountId, string $day, string $type, int $gross, int $net, ?int $fanId = null): int
@@ -65,9 +65,9 @@ test('Period: běžící měsíc se srovnává se stejnými dny minulého měsí
     assertSame('vs. předchozí měsíc', $past->compareLabel());
 });
 
-test('Period: YTD po měsících, přestupný rok, konec dat nejvýš dnešek', function (): void {
+test('Period: YTD po týdnech, přestupný rok, konec dat nejvýš dnešek', function (): void {
     $ytd = Period::yearToDate('2028-02-29');
-    assertSame(['2028-01-01', '2028-03-01', 'month'], [$ytd->from, $ytd->to, $ytd->bucketUnit()]);
+    assertSame(['2028-01-01', '2028-03-01', 'week'], [$ytd->from, $ytd->to, $ytd->bucketUnit()]);
     assertSame(['2027-01-01', '2027-03-01'], [$ytd->previous()->from, $ytd->previous()->to], '29. 2. → 28. 2. loni');
     assertSame('od začátku roku 2028', $ytd->label());
 
@@ -128,7 +128,7 @@ test('Stats: souhrn, rozpad modelek a platforem, nejvyšší platby za období',
     assertSame('whale', $stats->topFansIn($week)[0]['handle']);
 });
 
-test('Stats: časová řada po dnech (do dneška) a u YTD po měsících', function (): void {
+test('Stats: časová řada po dnech (do dneška) a u YTD po týdnech', function (): void {
     $db = testDatabase();
     $account = seedAccount($db, 'CZK');
     $model = (int) $db->scalar('SELECT model_id FROM accounts WHERE id = :id', ['id' => $account]);
@@ -150,30 +150,126 @@ test('Stats: časová řada po dnech (do dneška) a u YTD po měsících', funct
     assertSame([$model => 12000], $eighth['models']);
     assertSame(0, $series[0]['net']);
 
+    assertSame(['2026-09-08', '2026-09-08'], [$eighth['start'], $eighth['end']], 'den: začátek = konec');
+
     $ytd = $stats->series(Period::yearToDate('2026-09-10'));
-    assertSame(9, count($ytd), 'leden–září');
-    assertSame('2026-01-01', $ytd[0]['start']);
-    assertSame(800, $ytd[0]['net']);
-    assertSame(13600, $ytd[8]['net'], 'září bez zítřejší platby');
+    assertSame(37, count($ytd), 'týdny od čt 1. 1. do čt 10. 9.');
+    assertSame(['2026-01-01', '2026-01-04'], [$ytd[0]['start'], $ytd[0]['end']], 'první týden jen čt–ne');
+    assertSame(['2026-01-05', '2026-01-11'], [$ytd[1]['start'], $ytd[1]['end']], 'celý týden po–ne');
+    assertSame(['2026-01-12', 800], [$ytd[2]['start'], $ytd[2]['net']], 'čt 15. 1. patří do týdne od po 12. 1.');
+    assertSame(['2026-09-07', '2026-09-10', 13600, 500], [$ytd[36]['start'], $ytd[36]['end'], $ytd[36]['net'], $ytd[36]['costs']], 'poslední týden do dneška, bez zítřejší platby');
+    assertSame(14400, array_sum(array_column($ytd, 'net')), 'součet týdnů = součet plateb do dneška');
     assertSame([], $stats->series(Period::month('2026-12', '2026-09-10')), 'budoucí měsíc');
     assertSame('other', Stats::typeGroup('neznámý'));
 });
 
-test('AreaChart: skládané plochy, tooltip ID, escapované popisky, bez inline stylů', function (): void {
-    $svg = AreaChart::render(['1. 9.', '<b>'], [
-        ['key' => 'g-tip', 'name' => 'Spropitné', 'values' => [10000, 250000]],
-        ['key' => 'g-ppv', 'name' => 'PPV', 'values' => [5000, 0]],
-    ], ['den "1"', 'den 2'], 'Graf <x>', 'rev');
+/** Fanoušek na účtu, vrátí ID. */
+function insertFan(App\Database\Database $db, int $accountId, string $name, ?string $displayName = null): int
+{
+    return $db->insert('fans', ['account_id' => $accountId, 'external_id' => 'manual:' . $name, 'handle' => $name, 'display_name' => $displayName, 'first_seen_at' => Clock::nowUtc()]);
+}
+
+test('Stats: Koho oslovit — horních 20 % podle útraty, 30+ dní bez platby', function (): void {
+    $db = testDatabase();
+    $account = seedAccount($db, 'CZK');
+    $fans = [];
+    // [jméno, čistě v haléřích, poslední platba]
+    foreach ([['whale', 1_000_000, '2026-08-29'], ['active', 900_000, '2026-08-30'], ['sleeper', 800_000, '2026-05-01'],
+              ['recent', 700_000, '2026-09-27'], ['gone', 600_000, '2026-06-01']] as [$name, $net, $last]) {
+        $fans[$name] = insertFan($db, $account, $name, $name === 'whale' ? 'Velryba' : null);
+        insertPayment($db, $account, '2026-01-10', 'tip', $net, $net - 1000, $fans[$name]);
+        insertPayment($db, $account, $last, 'message', 1250, 1000, $fans[$name]);
+    }
+    for ($i = 1; $i <= 5; $i++) { // malí fanoušci, dávno bez platby — mimo horních 20 %
+        insertPayment($db, $account, '2026-02-01', 'tip', 1000, 800, insertFan($db, $account, 'small' . $i));
+    }
+    $refund = insertFan($db, $account, 'refund');
+    insertPayment($db, $account, '2026-03-01', 'tip', 5_000_000, 5_000_000, $refund);
+    insertPayment($db, $account, '2026-03-02', 'other', -5_000_000, -5_000_000, $refund); // vrácené — čistě 0
+    insertPayment($db, $account, '2026-10-05', 'tip', 9_000_000, 9_000_000, $fans['sleeper']); // budoucí datum se nepočítá
+    insertPayment($db, $account, '2026-01-10', 'tip', 99_000_000, 99_000_000); // bez fanouška
+
+    $stats = new Stats($db);
+    $default = $stats->lapsedTopFans('2026-09-28');
+    assertSame(['Velryba'], array_column($default, 'name'), 'z 10 platících jsou horních 20 % dva; aktivní vypadne');
+    assertSame([30, '2026-08-29', 1_000_000, 2], [$default[0]['days'], $default[0]['last_payment'], $default[0]['net'], $default[0]['payments']], 'přesně 30 dní se počítá');
+
+    $wider = $stats->lapsedTopFans('2026-09-28', 30, 0.5);
+    assertSame(['Velryba', 'sleeper', 'gone'], array_column($wider, 'name'), 'podle útraty, jméno z handle');
+    assertSame([150, 800_000], [$wider[1]['days'], $wider[1]['net']], 'budoucí platba nezvyšuje útratu ani neruší odmlčení');
+    assertSame(119, $wider[2]['days']);
+    assertSame(['Velryba', 'sleeper'], array_column($stats->lapsedTopFans('2026-09-28', 30, 0.5, 2), 'name'), 'limit');
+    assertSame(['Velryba', 'active', 'sleeper', 'gone'], array_column($stats->lapsedTopFans('2026-09-28', 29, 0.5), 'name'), '29 dní už stačí při kratší hranici');
+    assertSame([], (new Stats(testDatabase()))->lapsedTopFans('2026-09-28'), 'bez fanoušků');
+    assertThrows(InvalidArgumentException::class, fn () => $stats->lapsedTopFans('2026-09-28', 0));
+    assertThrows(InvalidArgumentException::class, fn () => $stats->lapsedTopFans('2026-09-28', 30, 1.5));
+});
+
+test('Stats: závislost na největších fanoušcích, platící fanoušci a průměr za období', function (): void {
+    $db = testDatabase();
+    $account = seedAccount($db, 'CZK');
+    foreach ([['a', 600_000], ['b', 300_000], ['c', 100_000], ['d', 50_000]] as [$name, $net]) {
+        insertPayment($db, $account, '2026-09-10', 'tip', $net, $net, insertFan($db, $account, $name));
+    }
+    $refund = insertFan($db, $account, 'e');
+    insertPayment($db, $account, '2026-09-11', 'tip', 10_000, 10_000, $refund);
+    insertPayment($db, $account, '2026-09-12', 'other', -30_000, -30_000, $refund); // čistě záporně — neplatící
+    insertPayment($db, $account, '2026-09-13', 'subscription', 200_000, 200_000); // bez fanouška
+    insertPayment($db, $account, '2026-08-31', 'tip', 999_000, 999_000, insertFan($db, $account, 'f')); // mimo období
+
+    $stats = new Stats($db);
+    $september = Period::month('2026-09', '2026-09-28');
+    $concentration = $stats->fanConcentration($september);
+    assertSame(['paying' => 4, 'fan_net' => 1_050_000, 'average' => 262_500, 'top_count' => 3, 'top_net' => 1_000_000], $concentration);
+    assertSame(600_000, $stats->fanConcentration($september, 1)['top_net']);
+    assertSame(['paying' => 0, 'fan_net' => 0, 'average' => null, 'top_count' => 0, 'top_net' => 0], $stats->fanConcentration(Period::month('2026-07', '2026-09-28')));
+
+    $net = $stats->summary($september)['net'];
+    assertSame(1_230_000, $net, 'čisté příjmy období včetně plateb bez fanouška a refundace');
+    assertSame(round(1_000_000 / 1_230_000, 6), round((float) DashboardController::topShare(1_000_000, $net), 6));
+    assertSame(null, DashboardController::topShare(0, 500), 'bez fanoušků nelze');
+    assertSame(null, DashboardController::topShare(500, 0), 'bez příjmů nelze');
+    assertSame(1.0, DashboardController::topShare(900, 600), 'víc než 100 % (refundace mimo fanoušky) se ořízne');
+});
+
+test('StackedColumnChart: skládané díly s mezerou, zaoblený vrchol, tooltip a klávesnice, bez inline stylů', function (): void {
+    $svg = StackedColumnChart::render(['1. 9.', '<b>', '3. 9.'], [
+        ['key' => 'g-subscription', 'name' => 'Předplatné', 'values' => [100000, 250000, 0]],
+        ['key' => 'g-tip', 'name' => 'Spropitné', 'values' => [50000, 0, 0]],
+        ['key' => 'g-ppv', 'name' => 'PPV', 'values' => [20000, 0, -300]],
+    ], ['den "1"', 'den 2', 'den 3'], 'Graf <x>', 'rev');
     assertTrue(str_starts_with($svg, '<svg') && str_ends_with($svg, '</svg>'));
-    assertTrue(str_contains($svg, 'data-tip="rev-tip-1"'));
-    assertTrue(str_contains($svg, 'url(#rev-g-tip)') && str_contains($svg, 'class="stop-g-ppv"'));
+    assertSame(3, substr_count($svg, 'class="chart-group stack-col" tabindex="0"'), 'každý sloupec je cíl pro klávesnici');
+    assertTrue(str_contains($svg, 'data-tip="rev-tip-0"') && str_contains($svg, 'data-tip="rev-tip-2"'));
+    assertTrue(str_contains($svg, 'aria-label="den &quot;1&quot;"') && str_contains($svg, '<title>den &quot;1&quot;</title>'));
     assertTrue(str_contains($svg, '&lt;b&gt;') && !str_contains($svg, '<b>'), 'popisky escapované');
-    assertTrue(str_contains($svg, 'den &quot;1&quot;'));
     assertTrue(str_contains($svg, 'aria-label="Graf &lt;x&gt;"'));
     assertTrue(!str_contains($svg, 'style='), 'CSP: žádné inline styly');
     assertTrue(str_contains($svg, '3 000') || str_contains($svg, "3\u{00A0}000"), 'kulatá osa');
-    assertTrue(str_contains(AreaChart::render(['1. 9.'], [['key' => 'a', 'name' => 'a', 'values' => [100]]], [], 'x', 'one'), 'one-tip-0'), 'jeden bod');
-    assertSame('', AreaChart::render([], [], [], 'x', 'x'));
+
+    // 1. sloupec: předplatné (spodní díl) je obdélník, PPV nahoře má zaoblený vrchol (path), prázdný 3. sloupec nemá díly.
+    preg_match_all('/<g class="chart-group stack-col".*?<\/g>/s', $svg, $columns);
+    assertTrue(str_contains($columns[0][0], '<rect class="fill-g-subscription"') && str_contains($columns[0][0], '<path class="fill-g-ppv"'));
+    assertTrue(str_contains($columns[0][1], '<path class="fill-g-subscription"'), 'jediný díl má zaoblený vrchol');
+    assertTrue(!preg_match('/class="fill-/', $columns[0][2]), 'záporné ani nulové hodnoty se nekreslí');
+    preg_match('/<rect class="fill-g-subscription" x="[\d.]+" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/', $columns[0][0], $bottom);
+    preg_match('/<rect class="fill-g-tip" x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+"/', $columns[0][0], $middle);
+    assertTrue($bottom !== [] && $middle !== [], 'prostřední díl je obdélník');
+    assertTrue((float) $bottom[2] <= 24.0, 'sloupec max. 24 px');
+    preg_match('/fill-g-tip" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/', $columns[0][0], $tipBox);
+    assertTrue(abs(((float) $tipBox[1] + (float) $tipBox[2]) + 2 - (float) $bottom[1]) < 0.15, 'mezi díly 2px mezera');
+
+    // Nepatrný horní díl (pod 1 px) se nekreslí a zaoblený vrchol dostane díl pod ním.
+    $tiny = StackedColumnChart::render(['a', 'b'], [
+        ['key' => 'g-tip', 'name' => 'T', 'values' => [100000, 250000]],
+        ['key' => 'g-ppv', 'name' => 'P', 'values' => [300, 0]],
+    ], [], 'x', 'tiny');
+    preg_match('/<g class="chart-group stack-col".*?<\/g>/s', $tiny, $first);
+    assertTrue(str_contains($first[0], '<path class="fill-g-tip"') && !str_contains($first[0], 'fill-g-ppv'), $first[0]);
+
+    assertTrue(str_contains(StackedColumnChart::render(['1. 9.'], [['key' => 'a', 'name' => 'a', 'values' => [100]]], [], 'x', 'one'), 'one-tip-0'), 'jeden sloupec');
+    assertSame('', StackedColumnChart::render([], [], [], 'x', 'x'));
+    assertSame(31, substr_count(StackedColumnChart::render(array_fill(0, 31, 'd'), [['key' => 'a', 'name' => 'a', 'values' => array_fill(0, 31, 0)]], [], 'x', 'z'), 'stack-col'), 'bez plateb jen osy a cíle');
 });
 
 test('Donut, SplitBar, Sparkline, ProgressRing: prázdná data, escapování, bez inline stylů', function (): void {
@@ -204,6 +300,30 @@ test('Donut, SplitBar, Sparkline, ProgressRing: prázdná data, escapování, be
     assertSame([400000, 100000], ChartScale::nice(350000));
 });
 
+function viewHelpers(): App\Kernel\ViewHelpers
+{
+    $session = new App\Kernel\Session('test', 3600, 7200, '/');
+
+    return new App\Kernel\ViewHelpers(new App\Kernel\UrlGenerator('https://studio.example.com', '/admin'), new App\Security\Csrf($session), $session, 'Test');
+}
+
+test('ViewHelpers::delta: nulová změna je neutrální, jinak barva podle směru a typu', function (): void {
+    $v = viewHelpers();
+    foreach ([[0.0, false], [0.0, true], [0.0004, true], [-0.0004, false], [-0.0004, true]] as [$change, $invert]) {
+        $html = $v->delta($change, $invert);
+        assertTrue(str_contains($html, 'delta-neutral'), "{$change} → neutrální: {$html}");
+        assertTrue(str_contains($html, "0,0\u{00A0}%") && !str_contains($html, '<svg') && !str_contains($html, '−') && !str_contains($html, '+'), "bez šipky a znaménka: {$html}");
+    }
+    $up = $v->delta(0.123);
+    assertTrue(str_contains($up, 'delta-good') && str_contains($up, "+12,3\u{00A0}%") && str_contains($up, '<svg'), $up);
+    assertTrue(str_contains($v->delta(0.0005), 'delta-good') && str_contains($v->delta(0.0005), '+0,1'), 'po zaokrouhlení 0,1 % už je změna');
+    assertTrue(str_contains($v->delta(-0.05), 'delta-bad') && str_contains($v->delta(-0.05), "−5,0\u{00A0}%"));
+    assertTrue(str_contains($v->delta(0.05, true), 'delta-bad'), 'růst nákladů je špatně');
+    assertTrue(str_contains($v->delta(-0.05, true), 'delta-good'), 'pokles nákladů je dobře');
+    assertTrue(str_contains($v->delta(0.1, false, true), 'delta-neutral') && str_contains($v->delta(0.1, false, true), '<svg'), 'poplatky: bez hodnocení, se šipkou');
+    assertTrue(str_contains($v->delta(null), 'delta-none'));
+});
+
 test('Icon a přehled: neznámá ikona, změna oproti minulému období, barva platformy', function (): void {
     assertTrue(str_contains(Icon::svg('wallet'), 'aria-hidden="true"'));
     assertThrows(InvalidArgumentException::class, fn () => Icon::svg('neexistuje'));
@@ -213,4 +333,8 @@ test('Icon a přehled: neznámá ikona, změna oproti minulému období, barva p
     assertSame('p2', DashboardController::platformKey(4, [1 => 1, 4 => 2]));
     assertSame('p0', DashboardController::platformKey(9, [9 => 6]), 'šestá a další platforma sdílí neutrální barvu');
     assertSame('p0', DashboardController::platformKey(5, [1 => 1]), 'platforma pro návštěvnost');
+    $d = static fn (string $v): DateTimeImmutable => new DateTimeImmutable($v);
+    assertSame("5.\u{2013}11. 1. 2026", DashboardController::dayRange($d('2026-01-05'), $d('2026-01-11')));
+    assertSame("26. 1. \u{2013} 1. 2. 2026", DashboardController::dayRange($d('2026-01-26'), $d('2026-02-01')));
+    assertSame('4. 1. 2026', DashboardController::dayRange($d('2026-01-04'), $d('2026-01-04')));
 });
