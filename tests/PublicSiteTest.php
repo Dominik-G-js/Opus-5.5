@@ -55,13 +55,13 @@ test('Úvodní stránka: bez zveřejněných modelek ukáže představení studi
     $r = publicGet($app, '/');
     assertSame(200, $r->status());
     $html = $r->body();
-    assertTrue(str_contains($html, '<h1>Testovací Studio</h1>'), 'název studia v nadpisu');
+    assertTrue(str_contains($html, '<span class="brand-name">Testovací Studio</span>') && str_contains($html, '<title>Testovací Studio</title>'), 'název studia ve značce a titulku');
     assertTrue(str_contains($html, 'První tvůrkyně tu představíme'), 'představení studia');
-    assertTrue(!str_contains($html, 'class="grid"') && !str_contains($html, 'Skrytá'), 'nezveřejněná modelka se neukáže');
+    assertTrue(!str_contains($html, 'home-card') && !str_contains($html, 'Skrytá'), 'nezveřejněná modelka se neukáže');
     assertTrue(!str_contains($html, 'tajna-sprava'), 'žádná zmínka o administraci');
     assertTrue(str_contains($html, '<link rel="canonical" href="https://studio.example.test/">'));
-    preg_match("/'nonce-([^']+)'/", (string) $r->header('Content-Security-Policy'), $m);
-    assertTrue(isset($m[1]) && str_contains($html, 'nonce="' . $m[1] . '"'), 'CSP nonce sedí na inline styl');
+    assertTrue(str_contains($html, '/assets/app.css?v=') && !str_contains($html, '<style'), 'vzhled administrace z app.css, žádné inline styly');
+    assertTrue(!str_contains((string) $r->header('Content-Security-Policy'), 'nonce-'), 'CSP bez výjimky pro inline styly');
     assertSame(null, $r->header('Set-Cookie'), 'veřejná stránka nenastavuje cookies');
 });
 
@@ -76,7 +76,7 @@ test('Úvodní stránka: karty zveřejněných modelek s fotkou, jménem, popisk
 
     $html = publicGet($app, '/')->body();
     assertTrue(!str_contains($html, 'První tvůrkyně tu představíme'), 'bez úvodního představení');
-    assertSame(3, substr_count($html, 'class="card"'), 'tři zveřejněné modelky');
+    assertSame(3, substr_count($html, 'class="card model-card home-card"'), 'tři zveřejněné modelky');
     assertTrue(str_contains($html, 'href="https://studio.example.test/m/anna"'), 'odkaz na /m/{slug}');
     assertTrue(str_contains($html, 'src="https://studio.example.test/media/p/' . str_repeat('a', 32) . '.jpg"'), 'veřejná fotka');
     assertTrue(str_contains($html, 'Anna &lt;b&gt;') && !str_contains($html, 'Anna <b>'), 'jméno je escapované');

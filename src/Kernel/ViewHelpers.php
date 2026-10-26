@@ -16,7 +16,7 @@ use App\Support\Money;
 final class ViewHelpers
 {
     /** Zvýšit při změně CSS/JS kvůli cache prohlížeče. */
-    private const ASSET_VERSION = '10';
+    private const ASSET_VERSION = '11';
 
     /** @var array<string, mixed> */
     private array $old = [];

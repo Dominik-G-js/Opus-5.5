@@ -93,7 +93,6 @@ final class PublicController
             'studio' => $this->app->config->string('app_name', 'AI Model Studio'),
             'canonical' => $origin . '/',
             'cards' => $cards,
-            'nonce' => $this->app->cspNonce(),
         ], null);
 
         return Response::html($html)->withHeader('Cache-Control', 'public, max-age=300');
