@@ -43,6 +43,7 @@ Pro ostrý provoz na serveru viz [Instalace](#instalace) níže.
 | **Náklady** | podle modelky, nástroje a kategorie, počet kusů → **cena za obrázek**, společné náklady, export CSV |
 | **Odkazy** | sledovací odkazy `/go/kód` pro každý zdroj (TikTok, X, Reddit…), prokliky po dnech bez cookies a bez ukládání IP |
 | **Landing page** | `/m/slug` nebo vlastní doména, SEO (title, description, canonical, Open Graph, ProfilePage + Person JSON-LD se `sameAs`), sitemap.xml, robots.txt, SFW galerie, 18+ odkazy za potvrzením věku, povinné označení AI |
+| **Úvodní stránka** | `/` na hlavní doméně: rozcestník zveřejněných modelek (karta s fotkou, jménem a popiskem → landing page); dokud žádná zveřejněná není, krátké představení studia. Bez odkazu na administraci |
 
 ### Napojení na platformy
 - **Fanvue** — oficiální API (OAuth 2.0 + PKCE). Stahuje každou platbu (typ, částka, fanoušek) a denní počty nových/zrušených předplatitelů. Endpointy ověřené z oficiálních balíčků `@fanvue/builder-sdk` a `@fanvue/n8n-nodes-fanvue`.
@@ -162,7 +163,7 @@ python3 tests/e2e/integration.py   # Fanvue OAuth + synchronizace a kurzy ČNB p
 ```
 public/        webroot (index.php, CSS, JS, .htaccess)
 src/           aplikace (Kernel, Security, Form, Service, Integration/Fanvue, Controller)
-templates/     šablony (administrace + veřejná landing page)
+templates/     šablony (administrace + veřejná úvodní stránka a landing page)
 migrations/    schéma databáze a výchozí data (platformy, AI nástroje s cenami)
 bin/console    instalace, uživatelé, synchronizace, úklid, import modelky (model:import)
 models/        hotové modelky k importu (JSON) a popis formátu

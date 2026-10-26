@@ -195,6 +195,8 @@ check(r.status_code == 200 and r.headers["Content-Type"] == "image/jpeg", "publi
 check(b"SECRET-WORKFLOW" not in r.content, "metadata stripped from public image")
 r = anon.get(B + "/sitemap.xml")
 check("/m/nessa-wren" in r.text, "sitemap lists model")
+r = anon.get(B + "/")
+check(r.status_code == 200 and "/m/nessa-wren" in r.text and "/media/p/" in r.text, "homepage lists published model with photo")
 r = anon.get(A + f"/images/{image_id}", allow_redirects=False)
 check(r.status_code == 303, "private image requires login")
 

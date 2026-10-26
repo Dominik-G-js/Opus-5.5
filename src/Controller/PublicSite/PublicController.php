@@ -11,10 +11,12 @@ use App\Kernel\Response;
 use App\Kernel\Router;
 use App\Kernel\Services;
 use App\Service\LinkTracker;
+use App\Support\Str;
 
 /**
- * Veřejná část: SEO landing page modelek (na hlavní doméně /m/{slug} nebo na vlastní doméně),
- * sledovací přesměrování /go/{kód}, veřejné obrázky, robots.txt a sitemap.xml.
+ * Veřejná část: úvodní stránka studia (rozcestník zveřejněných modelek), SEO landing page modelek
+ * (na hlavní doméně /m/{slug} nebo na vlastní doméně), sledovací přesměrování /go/{kód}, veřejné obrázky,
+ * robots.txt a sitemap.xml.
  * Nepoužívá session ani cookies.
  */
 final class PublicController
@@ -26,6 +28,7 @@ final class PublicController
     public function handleMainHost(Request $request): Response
     {
         $router = new Router();
+        $router->get('/', fn (Request $q) => $this->home());
         $router->get('/m/{slug}', fn (Request $q) => $this->modelBySlug($q));
         $router->get('/go/{code}', fn (Request $q) => $this->go($q, null));
         $router->get('/media/p/{publicId}.jpg', fn (Request $q) => $this->media($q, null));
@@ -60,6 +63,40 @@ final class PublicController
         [$handler, $params] = $router->match($request->method, $request->path);
 
         return $handler($request->withRouteParams($params));
+    }
+
+    /** Rozcestník zveřejněných modelek; dokud žádná není, krátké představení studia. */
+    private function home(): Response
+    {
+        $urls = $this->app->urls;
+        $origin = $urls->origin() . $urls->basePath();
+        $models = $this->app->db->all(
+            "SELECT m.slug, m.name, m.tagline, m.public_bio, m.page_domain, i.public_id, i.alt_text
+             FROM models m
+             LEFT JOIN images i ON i.id = m.avatar_image_id AND i.model_id = m.id AND i.is_public = 1
+             WHERE m.page_published = 1
+             ORDER BY m.name COLLATE NOCASE, m.id"
+        );
+        $cards = array_map(static function (array $m) use ($urls, $origin): array {
+            $bio = preg_replace('/\s+/', ' ', trim((string) ($m['public_bio'] ?? ''))) ?? '';
+
+            return [
+                'name' => (string) $m['name'],
+                'url' => $urls->modelPage((string) $m['slug'], $m['page_domain']),
+                'text' => trim((string) ($m['tagline'] ?? '')) !== '' ? trim((string) $m['tagline']) : Str::limit($bio, 140),
+                'photo' => $m['public_id'] !== null ? $origin . '/media/p/' . $m['public_id'] . '.jpg' : null,
+                'alt' => (string) ($m['alt_text'] ?? ''),
+            ];
+        }, $models);
+
+        $html = $this->app->view->render('public/home', [
+            'studio' => $this->app->config->string('app_name', 'AI Model Studio'),
+            'canonical' => $origin . '/',
+            'cards' => $cards,
+            'nonce' => $this->app->cspNonce(),
+        ], null);
+
+        return Response::html($html)->withHeader('Cache-Control', 'public, max-age=300');
     }
 
     private function modelBySlug(Request $request): Response
@@ -169,6 +206,10 @@ final class PublicController
             ? [$onlyModel]
             : $this->app->db->all("SELECT slug, page_domain, updated_at FROM models WHERE page_published = 1 AND (page_domain IS NULL OR page_domain = '')");
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+        if ($onlyModel === null) {
+            $home = $this->app->urls->origin() . $this->app->urls->basePath() . '/';
+            $xml .= '  <url><loc>' . htmlspecialchars($home, ENT_XML1 | ENT_QUOTES, 'UTF-8') . "</loc></url>\n";
+        }
         foreach ($models as $model) {
             $loc = $this->app->urls->modelPage((string) $model['slug'], $model['page_domain'] ?? null);
             $lastmod = substr((string) $model['updated_at'], 0, 10);

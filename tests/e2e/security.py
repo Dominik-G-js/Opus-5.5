@@ -153,7 +153,7 @@ for p in ["/../config/config.php", "/..%2fconfig%2fconfig.php", "/storage/databa
 r = sess().get(B + "/robots.txt")
 check("admin" not in r.text, "robots.txt neprozrazuje cestu k administraci")
 r = sess().get(B + "/")
-check(r.status_code == 404, "kořen hlavní domény → 404 (neprozrazuje admin)")
+check(r.status_code == 200 and "admin" not in r.text.lower(), "úvodní stránka neprozrazuje administraci")
 
 # 11) Nezveřejněná modelka: stránka ani obrázky nejsou vidět
 post(s, f"/models/{mid.group(1)}", {"name": "XSS test", "slug": "xss-test", "status": "active", "persona_age": "30", "page_lang": "en"})
